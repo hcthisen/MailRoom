@@ -1,0 +1,125 @@
+{{/* One broadcast: overview, send controls, test send and preview.
+.Data is ui.broadcastShowData. */}}
+{{define "actions"}}{{with .Data}}
+{{if .Editable}}<a class="btn btn-primary" href="/admin/broadcasts/{{.B.ID}}/edit">Edit</a>{{end}}
+<a class="btn" href="/admin/broadcasts/{{.B.ID}}/stats">Stats</a>
+{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/broadcasts/%d/duplicate" .B.ID) "Label" "Duplicate" "Class" " ")}}
+{{end}}{{end}}
+
+{{define "content"}}{{with .Data}}
+{{if .Sending.Paused}}<div class="flash flash-warning" role="status"><p><strong>All sending is paused</strong>{{with .Sending.Reason}}: {{.}}{{end}}. Nothing goes out, also for this broadcast, until sending is resumed on the <a href="/admin/health">Health</a> page.</p></div>{{end}}
+{{if .BreakerPaused}}<div class="flash flash-error" role="alert"><p><strong>Paused by the circuit breaker.</strong> Too many of its emails bounced or were reported as spam. Check the <a href="/admin/broadcasts/{{.B.ID}}/stats">stats</a> and the audience before you resume: a bad list can get the SES account suspended.</p></div>{{end}}
+{{if .SnapshotFailed}}<div class="flash flash-error" role="alert"><p><strong>The recipient list could not be built.</strong> The audience segment may have been changed so it no longer works. Fix the segment, then retry.</p></div>{{end}}
+{{with .Stats.MissingTags}}<div class="flash flash-warning" role="status"><p><strong>Check the segment:</strong> it refers to tags that don't exist ({{join . ", "}}). Rules on them match nobody, or everybody for "doesn't have".</p></div>{{end}}
+
+<div class="grid grid-2">
+  <section class="card" aria-labelledby="overview-title">
+    <h2 id="overview-title">Overview</h2>
+    <dl class="props">
+      <dt>Status</dt><dd>{{badge "broadcast" .B.Status}}{{with .B.PausedReason}} <span class="muted small">{{template "paused-reason" .}}</span>{{end}}</dd>
+      <dt>Audience</dt><dd>{{template "audience" .B.Audience}}</dd>
+      <dt>Subject</dt><dd>{{.B.Email.Subject}}</dd>
+      {{with .B.Email.Preheader}}<dt>Preheader</dt><dd>{{.}}</dd>{{end}}
+      <dt>From</dt><dd>{{if .B.FromName}}{{.B.FromName}}{{else}}{{or .DefaultFromName "(no name)"}} <span class="muted small">(default)</span>{{end}} <span class="muted">&lt;{{or .FromEmail "no From address set"}}&gt;</span></dd>
+      <dt>Reply-To</dt><dd>{{or .ReplyTo "none"}}{{if not .B.ReplyTo}} <span class="muted small">(default)</span>{{end}}</dd>
+      {{with .B.ScheduledAt}}<dt>Scheduled for</dt><dd>{{fmtTime .}} <span class="muted small">({{ago .}}, {{timezone}})</span></dd>{{end}}
+      {{with .B.StartedAt}}<dt>Started</dt><dd>{{fmtTime .}}</dd>{{end}}
+      {{with .B.FinishedAt}}<dt>{{if eq $.Data.B.Status "cancelled"}}Cancelled{{else}}Finished{{end}}</dt><dd>{{fmtTime .}}</dd>{{end}}
+      {{if .Started}}<dt>Recipients</dt><dd>{{if .B.SnapshotDoneAt}}{{num .B.RecipientsTotal}}{{else}}{{num .Stats.Recipients}} so far <span class="muted small">(still queueing)</span>{{end}}</dd>{{end}}
+      {{with .B.ArchiveURL}}<dt>Web version</dt><dd><a href="{{.}}" rel="noopener" target="_blank">{{.}}</a></dd>{{end}}
+      <dt>Created</dt><dd>{{fmtTime .B.CreatedAt}}</dd>
+    </dl>
+  </section>
+
+  <section class="card" aria-labelledby="send-title">
+    <h2 id="send-title">Sending</h2>
+    {{$id := .B.ID}}{{$v := printf "%d" .B.Version}}
+    {{if eq .B.Status "draft"}}
+      <p>Send it now, or pick when it should start. Send yourself a test first.</p>
+      <form method="post" action="/admin/broadcasts/{{$id}}/schedule" novalidate>
+        {{template "csrf" $}}<input type="hidden" name="version" value="{{$v}}">
+        {{template "form-error" .ScheduleForm}}
+        {{template "field" (dict "Form" .ScheduleForm "Name" "at" "Label" "Start at" "Type" "datetime-local" "Required" true "Hint" (printf "Date and time in %s (the settings time zone)." timezone))}}
+        <div class="form-actions"><button class="btn" type="submit">Schedule</button></div>
+      </form>
+      <hr>
+    {{else if eq .B.Status "scheduled"}}
+      <p>Starts by itself on <strong>{{fmtTime .B.ScheduledAt}}</strong> ({{ago .B.ScheduledAt}}). You can still edit it until then.</p>
+      <div class="row">{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/broadcasts/%d/unschedule" $id) "Label" "Unschedule" "Class" " " "Fields" (dict "version" $v))}}</div>
+      <hr>
+    {{else if eq .B.Status "sending"}}
+      <p>Sent <strong>{{num .Stats.Sent}}</strong> of {{num .Stats.Recipients}}{{if not .B.SnapshotDoneAt}} (recipients are still being queued){{end}}; {{num .Stats.Queued}} waiting.</p>
+      {{if gt .Stats.Recipients 0}}<meter class="quota" min="0" max="{{.Stats.Recipients}}" value="{{.Stats.Sent}}" aria-label="Sent so far">{{num .Stats.Sent}}</meter>{{end}}
+      <div class="row">{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/broadcasts/%d/pause" $id) "Label" "Pause" "Class" " " "Fields" (dict "version" $v))}}</div>
+    {{else if eq .B.Status "paused"}}
+      <p>Paused {{template "paused-reason" .B.PausedReason}} after {{num .Stats.Sent}} of {{num .Stats.Recipients}} emails; {{num .Stats.Queued}} are waiting.</p>
+      {{if .BreakerPaused}}
+        <dl class="props">
+          <dt>Bounce rate</dt><dd>{{pct .Stats.Rates.Bounce}} <span class="muted small">({{num .Stats.Bounced}} of {{num .Stats.Sent}})</span></dd>
+          <dt>Complaint rate</dt><dd>{{pct .Stats.Rates.Complaint}} <span class="muted small">({{num .Stats.Complained}} of {{num .Stats.Sent}})</span></dd>
+        </dl>
+        <form method="post" action="/admin/broadcasts/{{$id}}/resume" class="stack">
+          {{template "csrf" $}}<input type="hidden" name="version" value="{{$v}}">
+          {{template "form-error" .ResumeForm}}
+          {{template "checkbox-field" (dict "Form" .ResumeForm "Name" "confirm_resume" "Label" "I checked the numbers and the list, and want to continue sending" "Hint" "After you resume, the circuit breaker only counts emails sent from now on.")}}
+          <div class="form-actions"><button class="btn btn-danger" type="submit">Resume sending</button></div>
+        </form>
+      {{else}}
+        <div class="row">{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/broadcasts/%d/resume" $id) "Label" (or (and .SnapshotFailed "Retry and resume") "Resume") "Class" "btn-primary" "Fields" (dict "version" $v))}}</div>
+      {{end}}
+      <hr>
+    {{else if eq .B.Status "sent"}}
+      <p>Sent to {{num .B.RecipientsTotal}} recipients{{with .B.FinishedAt}}, finished {{fmtTime .}}{{end}}. <a href="/admin/broadcasts/{{$id}}/stats">See the stats</a>.</p>
+      <p class="muted small">Sent broadcasts can't be changed. Duplicate it to send a changed copy.</p>
+    {{else if eq .B.Status "cancelled"}}
+      <p>Cancelled{{with .B.FinishedAt}} {{fmtTime .}}{{end}}{{if .Stats.Sent}} after {{num .Stats.Sent}} emails were sent{{end}}. It can't be restarted; duplicate it to make a new draft.</p>
+    {{end}}
+
+    {{if or .CanSend .CanCancel .CanDelete}}<div class="row">
+      {{if .CanSend}}<form method="post" action="/admin/broadcasts/{{$id}}/send" class="inline">{{template "csrf" $}}<input type="hidden" name="version" value="{{$v}}"><button class="btn btn-primary" type="submit">Send now…</button></form>{{end}}
+      {{if .CanCancel}}<form method="post" action="/admin/broadcasts/{{$id}}/cancel" class="inline">{{template "csrf" $}}<input type="hidden" name="version" value="{{$v}}"><button class="btn" type="submit">Cancel broadcast…</button></form>{{end}}
+      {{if .CanDelete}}<form method="post" action="/admin/broadcasts/{{$id}}/delete" class="inline">{{template "csrf" $}}<input type="hidden" name="version" value="{{$v}}"><button class="btn btn-ghost" type="submit">Delete…</button></form>{{end}}
+    </div>
+    {{if .CanSend}}<p class="muted small">Send now asks you to confirm and shows the number of recipients first.</p>{{end}}{{end}}
+  </section>
+</div>
+
+{{if .Started}}
+<section aria-labelledby="numbers-title" class="stack">
+  <div class="row"><h2 id="numbers-title">Numbers</h2><span class="spacer"></span><a class="btn btn-sm" href="/admin/broadcasts/{{.B.ID}}/stats">All stats and recipients</a></div>
+  <div class="grid stats">
+    {{template "stat" (dict "Label" "Sent" "Value" (num .Stats.Sent) "Sub" (printf "of %s recipients" (num .Stats.Recipients)))}}
+    {{template "stat" (dict "Label" "Delivered" "Value" (num .Stats.Delivered) "Sub" (pct .Stats.Rates.Delivery))}}
+    {{template "stat" (dict "Label" "Bounced" "Value" (num .Stats.Bounced) "Sub" (pct .Stats.Rates.Bounce))}}
+    {{template "stat" (dict "Label" "Unique clicks" "Value" (num .Stats.UniqueClicks) "Sub" (pct .Stats.Rates.Click))}}
+  </div>
+</section>
+{{end}}
+
+<div class="grid grid-2">
+  <section class="card" aria-labelledby="test-title">
+    <h2 id="test-title">Send a test</h2>
+    <form method="post" action="/admin/broadcasts/{{.B.ID}}/test" novalidate>
+      {{template "csrf" $}}
+      {{template "form-error" .TestForm}}
+      {{template "textarea-field" (dict "Form" .TestForm "Name" "to" "Label" "Send to" "Rows" 2 "Required" true "Hint" "Up to 5 addresses, separated by commas or new lines. Addresses that unsubscribed, bounced or are suppressed are skipped.")}}
+      {{template "field" (dict "Form" .TestForm "Name" "contact" "Label" "Use the data of contact" "Type" "text" "Optional" true "Autocomplete" "off" "Placeholder" "e.g. anna@example.org" "Hint" "A contact's email address (or ID): merge fields show this contact's name and attributes. Leave empty to show the fallbacks.")}}
+      <div class="form-actions"><button class="btn" type="submit">Send test</button><span class="muted small">Tests don't count in the stats.</span></div>
+    </form>
+  </section>
+
+  <section class="card preview-panel" aria-labelledby="preview-title">
+    <div class="card-header"><h2 id="preview-title">Preview</h2><span class="htmx-indicator muted small">Updating…</span></div>
+    <form class="filters" method="post" action="/admin/broadcasts/{{.B.ID}}/preview"
+          hx-post="/admin/broadcasts/{{.B.ID}}/preview" hx-trigger="load, submit" hx-target="#broadcast-preview" hx-swap="innerHTML" hx-sync="this:replace">
+      {{template "csrf" $}}
+      <div class="field grow">
+        <label for="preview-contact">Show with the data of contact <span class="optional">(optional)</span></label>
+        <input id="preview-contact" name="preview_contact" type="text" autocomplete="off" placeholder="A contact's email address (or ID)">
+      </div>
+      <button class="btn" type="submit">Update preview</button>
+    </form>
+    <div id="broadcast-preview" aria-live="polite"><p class="muted">Loading the preview…</p></div>
+  </section>
+</div>
+{{end}}{{end}}

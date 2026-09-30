@@ -1,0 +1,25 @@
+{{/* Segment list. .Data is ui.audSegmentsData. */}}
+{{define "actions"}}<a class="btn btn-primary" href="/admin/segments/new">New segment</a>{{end}}
+
+{{define "content"}}{{with .Data}}
+{{if .Rows}}
+<div class="table-wrap"><table class="table">
+  <thead><tr><th scope="col">Name</th><th scope="col">Rules</th><th scope="col">Members now</th><th scope="col">Updated</th></tr></thead>
+  <tbody>
+  {{range .Rows}}<tr>
+    <td><a href="/admin/segments/{{.S.ID}}">{{.S.Name}}</a></td>
+    <td class="muted" title="{{.Description}}">{{truncate 120 .Description}}</td>
+    <td hx-get="/admin/segments/{{.S.ID}}/count" hx-trigger="load" hx-swap="innerHTML"><span class="muted small">Counting…</span></td>
+    <td class="nowrap">{{ago .S.UpdatedAt}}</td>
+  </tr>{{end}}
+  </tbody>
+</table></div>
+{{template "pager" .Pager}}
+{{else}}
+{{template "empty" (dict "Title" "No segments yet" "Text" "A segment is a saved filter, e.g. customers who clicked a link in the last 30 days. Broadcasts are sent to segments." "ActionURL" "/admin/segments/new" "ActionLabel" "Create a segment")}}
+{{end}}
+{{end}}{{end}}
+
+{{/* segment-count: a segment's live size (get-segment-count). .Data is
+segments.SegmentCounts. */}}
+{{define "segment-count"}}{{with .Data}}<span class="nowrap"><strong>{{num .Active}}</strong> active</span> <span class="muted small nowrap">of {{num .Total}}</span>{{if .MissingTags}} <span class="badge badge-warn" title="Unknown tags: {{join .MissingTags ", "}}">unknown tag</span>{{end}}{{end}}{{end}}

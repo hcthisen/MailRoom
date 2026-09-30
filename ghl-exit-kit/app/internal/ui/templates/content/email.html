@@ -1,0 +1,55 @@
+{{/* A stored email (get-email, update-email, send-test-email,
+delete-email) or the new-email page (create-email). .Data is
+ui.emailPageData. */}}
+{{define "actions"}}{{with .Data}}{{with .Email}}
+<form method="post" action="/admin/emails/{{.ID}}/delete" class="inline">
+  {{template "csrf" $}}
+  <input type="hidden" name="version" value="{{.Version}}">
+  <button class="btn btn-danger" type="submit">Delete…</button>
+</form>
+{{end}}{{end}}{{end}}
+
+{{define "content"}}{{with .Data}}
+{{template "content-tabs" .Tabs}}
+{{with .Locked}}<div class="flash flash-warning" role="status"><p>This is the content of the broadcast <a href="/admin/broadcasts/{{.ID}}">{{.Name}}</a>, which is {{.Status}}: it can't change any more. Duplicate the broadcast to send a changed version.</p></div>{{end}}
+
+{{if .Email}}
+<section class="card mb-5" aria-labelledby="uses-title">
+  <h2 id="uses-title">Used by</h2>
+  {{if .Usage.InUse}}<ul class="plain-list mb-0">
+    {{range .Usage.Steps}}<li>Step {{.Position}} of the sequence <a href="/admin/sequences/{{.SequenceID}}/steps/{{.StepID}}">{{.SequenceName}}</a></li>{{end}}
+    {{range .Usage.Broadcasts}}<li>The broadcast <a href="/admin/broadcasts/{{.ID}}">{{.Name}}</a> {{badge "broadcast" .Status}}</li>{{end}}
+    {{with .Usage.PendingMessages}}<li>{{plural . "message" "messages"}} with this email still waiting to be sent</li>{{end}}
+  </ul>{{else}}<p class="mb-0">Nothing: no sequence step or broadcast uses this email, so it can be deleted.</p>{{end}}
+</section>
+{{end}}
+
+<form method="post" action="{{if .Email}}/admin/emails/{{.Email.ID}}{{else}}/admin/emails{{end}}" novalidate>
+  {{template "csrf" $}}
+  {{with .Form.Get "version"}}<input type="hidden" name="version" value="{{.}}">{{end}}
+  {{template "form-error" .Form}}
+  <section class="card" aria-labelledby="content-title">
+    <h2 id="content-title">Content</h2>
+    {{template "field" (dict "Form" .Form "Name" "name" "Label" "Name" "Optional" true "Autocomplete" "off" "Hint" "Only you see this, e.g. Welcome 1. Lists show the subject when it is empty.")}}
+    {{template "email-editor" (dict "Form" .Form)}}
+  </section>
+  <div class="form-actions">
+    {{if not .Locked}}<button class="btn btn-primary" type="submit">{{if .Email}}Save changes{{else}}Save email{{end}}</button>{{end}}
+    <a class="btn" href="/admin/emails">{{if .Locked}}Back{{else}}Cancel{{end}}</a>
+    <span class="muted small">Nothing is sent when you save.</span>
+  </div>
+</form>
+
+{{with .Email}}
+<section class="card mt-5" aria-labelledby="test-title">
+  <h2 id="test-title">Send a test</h2>
+  <form method="post" action="/admin/emails/{{.ID}}/test" novalidate>
+    {{template "csrf" $}}
+    {{template "form-error" $.Data.TestForm}}
+    {{template "textarea-field" (dict "Form" $.Data.TestForm "Name" "to" "Label" "Send to" "Optional" true "Rows" 2 "Placeholder" $.Data.Owner "Hint" (printf "Up to 5 addresses, separated by commas or new lines. Leave empty to send it to the owner's address (%s). Addresses that unsubscribed, bounced or are suppressed are skipped." (or $.Data.Owner "none set")))}}
+    {{template "field" (dict "Form" $.Data.TestForm "Name" "contact" "Label" "Use the data of contact" "Optional" true "Autocomplete" "off" "Placeholder" "e.g. anna@example.org" "Hint" "A contact's email address (or ID): merge fields show this contact's name and attributes. Leave empty to show the fallbacks.")}}
+    <div class="form-actions"><button class="btn" type="submit">Send test</button><span class="muted small">This sends the saved version.</span></div>
+  </form>
+</section>
+{{end}}
+{{end}}{{end}}

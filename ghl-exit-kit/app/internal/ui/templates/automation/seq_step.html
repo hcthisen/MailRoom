@@ -1,0 +1,59 @@
+{{/* Add a step (add-sequence-step) or edit one (update-sequence-step), with a test send (send-sequence-step-test). .Data is ui.stepFormData. */}}
+{{define "actions"}}{{with .Data}}{{with .Step}}{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/sequences/%d/steps/%d/delete" $.Data.Seq.ID .ID) "Label" "Delete step…" "Class" "btn-danger" "Fields" (dict "version" (printf "%d" $.Data.Seq.Version)))}}{{end}}{{end}}{{end}}
+
+{{define "content"}}{{with .Data}}{{$f := .Form}}{{$seq := .Seq}}
+<form class="form" method="post" action="{{with .Step}}/admin/sequences/{{$seq.ID}}/steps/{{.ID}}{{else}}/admin/sequences/{{$seq.ID}}/steps{{end}}" novalidate>
+  {{template "csrf" $}}
+  <input type="hidden" name="version" value="{{$f.Get "version"}}">
+  {{template "form-error" $f}}
+
+  <section class="card" aria-labelledby="timing-title">
+    <h2 id="timing-title">When it is sent</h2>
+    <div class="row">
+      {{template "field" (dict "Form" $f "Name" "delay_value" "Label" "Wait" "Type" "number" "Inputmode" "numeric" "Required" true)}}
+      {{template "select-field" (dict "Form" $f "Name" "delay_unit" "Label" "Unit" "Options" .Units)}}
+      {{if not .Step}}{{if .Seq.Steps}}{{template "select-field" (dict "Form" $f "Name" "position" "Label" "Position" "Options" .Positions)}}{{end}}{{end}}
+    </div>
+    <p class="hint">{{if and .Step (eq .Step.Position 1)}}The wait counts from enrolment.{{else if and (not .Step) (not .Seq.Steps)}}The first step's wait counts from enrolment; 0 sends it right away.{{else}}The wait counts from when the previous step was queued (the first step: from enrolment). At most 365 days.{{end}}
+      {{if .Step}} Changing it also moves the due time of contacts waiting for this step.{{else}} A step added at the end also reaches contacts already in the sequence who haven't finished it.{{end}}</p>
+  </section>
+
+  <section class="card" aria-labelledby="email-title">
+    <h2 id="email-title">Email</h2>
+    {{with .Step}}<p class="hint">Edits apply to emails not sent yet. If another step or a broadcast uses the same email, it changes there too.</p>{{end}}
+    {{template "email-editor" (dict "Form" $f)}}
+  </section>
+
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">{{if .Step}}Save step{{else}}Add step{{end}}</button>
+    <a class="btn" href="/admin/sequences/{{$seq.ID}}#steps">Cancel</a>
+  </div>
+</form>
+
+{{with .Step}}{{$tf := $.Data.TestForm}}
+<div class="grid grid-2">
+  <section class="card" aria-labelledby="test-title">
+    <h2 id="test-title">Send a test</h2>
+    <form class="form" method="post" action="/admin/sequences/{{$seq.ID}}/steps/{{.ID}}/test" novalidate>
+      {{template "csrf" $}}
+      {{template "form-error" $tf}}
+      {{template "field" (dict "Form" $tf "Name" "to" "Label" "Send to" "Type" "text" "Optional" true "Autocomplete" "email" "Placeholder" (or $.Data.Owner "owner@example.com") "Hint" (printf "Up to 5 addresses, separated by commas. Leave empty to send to the owner's address%s. Merge fields use their fallbacks; the saved version is sent." (or (and $.Data.Owner (printf " (%s)" $.Data.Owner)) "")))}}
+      <div class="form-actions"><button class="btn" type="submit">Send test</button></div>
+    </form>
+  </section>
+  {{with $.Data.Stats}}<section class="card" aria-labelledby="stepstats-title">
+    <h2 id="stepstats-title">This step so far</h2>
+    <dl class="props">
+      <dt>Waiting for it</dt><dd>{{num .Waiting}}</dd>
+      <dt>Queued</dt><dd>{{num .Queued}}</dd>
+      <dt>Sent</dt><dd>{{num .Sent}}</dd>
+      <dt>Delivered</dt><dd>{{num .Delivered}}</dd>
+      <dt>Bounced</dt><dd>{{num .Bounced}}</dd>
+      <dt>Spam reports</dt><dd>{{num .Complained}}</dd>
+      <dt>Clicked</dt><dd>{{num .Clicked}} <span class="muted small">unique contacts</span></dd>
+      <dt>Unsubscribed</dt><dd>{{num .Unsubscribed}}</dd>
+    </dl>
+  </section>{{end}}
+</div>
+{{end}}
+{{end}}{{end}}

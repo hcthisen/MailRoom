@@ -1,0 +1,56 @@
+{{/* Suppression list with add, remove and lookup. .Data is
+ui.audSuppressionsData. */}}
+{{define "content"}}{{with .Data}}
+{{.Tabs}}
+<div class="grid grid-2 mb-5">
+  <section class="card" aria-labelledby="s-add-title">
+    <h2 id="s-add-title">Suppress an address</h2>
+    <form method="post" action="/admin/suppressions">
+      {{template "csrf" $}}
+      {{template "form-error" .AddForm}}
+      {{template "field" (dict "Form" .AddForm "Name" "email" "Label" "Email" "Type" "email" "Required" true "Autocomplete" "off" "Inputmode" "email")}}
+      {{template "field" (dict "Form" .AddForm "Name" "note" "Label" "Note" "Optional" true "Placeholder" "e.g. asked by phone not to be emailed")}}
+      <button class="btn btn-primary" type="submit">Suppress</button>
+    </form>
+    <p class="muted small">Only a hash of the address is stored. An active contact with it is set to suppressed.</p>
+  </section>
+  <section class="card" aria-labelledby="s-rm-title">
+    <h2 id="s-rm-title">Remove a manual suppression</h2>
+    <form method="post" action="/admin/suppressions/remove">
+      {{template "csrf" $}}
+      {{template "form-error" .RemoveForm}}
+      {{template "field" (dict "Form" .RemoveForm "Name" "remove_email" "Label" "Email" "Type" "email" "Required" true "Autocomplete" "off" "Inputmode" "email")}}
+      {{template "field" (dict "Form" .RemoveForm "Name" "remove_note" "Label" "Note" "Optional" true "Hint" "Recorded in the contact's consent log if it becomes active again.")}}
+      <button class="btn" type="submit">Review removal</button>
+    </form>
+    <p class="muted small">Erased addresses stay suppressed. Bounces and complaints are contact statuses, not suppressions.</p>
+  </section>
+</div>
+
+<form class="filters" method="get" action="/admin/suppressions" role="search" aria-label="Find suppressions">
+  <div class="field grow">
+    <label for="f-lookup">Check an address</label>
+    <input id="f-lookup" name="email" type="email" value="{{.Filter.Get "email"}}" autocomplete="off"{{if .Filter.Err "email"}} aria-invalid="true" aria-describedby="f-lookup-error"{{end}}>
+    {{with .Filter.Err "email"}}<p class="error-text" id="f-lookup-error">{{.}}</p>{{end}}
+  </div>
+  {{template "select-field" (dict "Form" .Filter "Name" "reason" "Label" "Reason" "Options" .Reasons)}}
+  <div class="field"><button class="btn" type="submit">Find</button>{{if or (.Filter.Get "email") (.Filter.Get "reason")}} <a class="btn btn-ghost" href="/admin/suppressions">Clear</a>{{end}}</div>
+</form>
+
+{{if .Items}}
+<div class="table-wrap"><table class="table">
+  <thead><tr><th scope="col">Address hash (SHA-256)</th><th scope="col">Reason</th><th scope="col">Note</th><th scope="col">Added</th></tr></thead>
+  <tbody>{{range .Items}}<tr>
+    <td class="mono small" title="{{.EmailHash}}">{{truncate 16 .EmailHash}}</td>
+    <td>{{if eq .Reason "erased"}}{{badge "" "erased"}}{{else}}{{badge "" "manual"}}{{end}}</td>
+    <td>{{.Note}}</td>
+    <td class="nowrap">{{fmtDate .CreatedAt}}</td>
+  </tr>{{end}}</tbody>
+</table></div>
+{{template "pager" .Pager}}
+{{else if .Filter.Get "email"}}
+<p class="card">{{badge "" "ok"}} {{.Filter.Get "email"}} is not on the suppression list{{with .Filter.Get "reason"}} with that reason{{end}}.</p>
+{{else if not .Filter.HasErrors}}
+{{template "empty" (dict "Title" "No suppressions" "Text" "Addresses land here when you suppress them or erase a contact.")}}
+{{end}}
+{{end}}{{end}}

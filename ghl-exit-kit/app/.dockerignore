@@ -1,0 +1,14 @@
+# Keep secrets, local data and build output out of the image build context.
+# vendor/ is deliberately NOT ignored: the image builds from the vendored
+# modules without network access (PRD O-6).
+.env
+.env.*
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/secret.key
+data/
+*.exe
+*.test
+*.out
+.git/

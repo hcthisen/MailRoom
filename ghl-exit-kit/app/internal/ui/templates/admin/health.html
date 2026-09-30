@@ -1,0 +1,87 @@
+{{define "content"}}{{with .Data}}
+{{.Tabs.HTML}}
+<div class="stack">
+<section class="card" aria-labelledby="sending-title">
+  <div class="card-header"><h2 id="sending-title">Sending</h2>{{if .Sending.Paused}}{{badge "" "paused"}}{{else if not .SendingErr}}{{badge "" "active"}}{{end}}</div>
+  {{with .SendingErr}}<p class="muted">{{.}}</p>{{else}}{{if .Sending.Paused}}
+    <p><strong>All sending is paused.</strong> Nothing is sent (broadcasts, sequence steps, confirmations, tests or alerts) until it is resumed. Queued emails are kept.</p>
+    <dl class="props">
+      {{with .Sending.Reason}}<dt>Reason</dt><dd>{{.}}</dd>{{end}}
+      <dt>Paused by</dt><dd>{{if eq .Sending.Source "ses"}}Amazon SES (lifted automatically when SES enables sending again){{else}}a person or API token (lifted only by resuming here or through the API){{end}}</dd>
+      {{with .Sending.Since}}<dt>Since</dt><dd>{{fmtTime .}} ({{ago .}})</dd>{{end}}
+      <dt>Waiting</dt><dd>{{num .Health.QueueDepth}} queued emails</dd>
+    </dl>
+    <div class="form-actions">
+      <form method="post" action="/admin/health/sending/resume" class="inline">{{template "csrf" $}}<button class="btn btn-primary" type="submit">Resume sending…</button></form>
+    </div>
+  {{else}}
+    <p>Emails are being sent normally. Pause to stop every kind of email at once, for example while you check a list or after a mistake. Queued emails are kept.</p>
+    <form method="post" action="/admin/health/sending/pause" novalidate>
+      {{template "csrf" $}}
+      {{template "field" (dict "Form" .PauseForm "Name" "reason" "Label" "Reason" "Optional" true "Hint" "Shown here and in the audit log (at most 500 characters).")}}
+      <button class="btn btn-danger" type="submit">Pause all sending</button>
+    </form>
+  {{end}}{{end}}
+</section>
+
+{{template "doctor-card" $}}
+
+<div class="grid grid-2">
+  <section class="card" aria-labelledby="ses-title">
+    <div class="card-header"><h2 id="ses-title">Amazon SES</h2><div class="actions"><a class="btn btn-sm" href="/admin/health?ses=live">Check SES now</a></div></div>
+    {{with .SES}}
+      <dl class="props">
+        <dt>Sending</dt><dd>{{if .Account.SendingEnabled}}{{badge "" "enabled"}}{{else}}{{badge "" "disabled"}} AWS has paused sending for the account{{end}}</dd>
+        <dt>Account</dt><dd>{{if .Account.ProductionAccessEnabled}}{{badge "" "ok"}} production access{{else}}{{badge "" "warn"}} sandbox: only verified addresses receive mail{{end}}</dd>
+        {{with .Account.ReviewStatus}}<dt>Access request</dt><dd>{{badge "" .}}</dd>{{end}}
+        {{with .Account.EnforcementStatus}}<dt>Reputation</dt><dd>{{badge "" .}}</dd>{{end}}
+        <dt>Daily quota</dt><dd>{{if gt .Account.Max24HourSend 0.0}}{{num .Account.SentLast24Hours}} of {{num .Account.Max24HourSend}} used ({{pct .QuotaUsed}}){{else}}no daily limit{{end}}</dd>
+        <dt>Maximum rate</dt><dd>{{num .Account.MaxSendRate}} emails per second</dd>
+        <dt>Checked</dt><dd>{{if eq .Source "live"}}just now, from SES{{else}}{{ago .Account.FetchedAt}} (the sender checks every 5 minutes){{end}}</dd>
+      </dl>
+    {{else}}
+      <p class="muted">{{.SESErr}}</p>
+    {{end}}
+  </section>
+
+  <section class="card" aria-labelledby="system-title">
+    <h2 id="system-title">System</h2>
+    <dl class="props">{{with .Health}}
+      <dt>Status</dt><dd>{{badge "" .Status}}</dd>
+      <dt>Database</dt><dd>{{if eq .Database "ok"}}{{badge "" "ok"}}{{else}}{{badge "" "fail"}} {{.Database}}{{end}}</dd>
+      <dt>Schema</dt><dd>version {{.SchemaVersion}}{{if lt .SchemaVersion .SchemaLatest}} ({{.SchemaLatest}} available: restart to migrate){{end}}</dd>
+      <dt>Send queue</dt><dd>{{num .QueueDepth}} queued, {{num .QueueDue}} due now</dd>
+      <dt>Jobs</dt><dd>{{num .JobsRunning}} running, {{num .JobsQueued}} waiting · <a href="/admin/health/jobs">all jobs</a></dd>
+    {{end}}{{with .Version}}
+      <dt>Version</dt><dd class="mono">{{.Version}}</dd>
+      <dt>Build</dt><dd class="mono">{{.GoVersion}} {{.Platform}}</dd>
+      <dt>Running for</dt><dd>{{$.Data.Uptime}} (since {{fmtTime .StartedAt}})</dd>
+    {{end}}</dl>
+  </section>
+</div>
+</div>
+{{end}}{{end}}
+
+{{/* doctor-card: the install checks (cached report; htmx swaps it after a run). */}}
+{{define "doctor-card"}}<section class="card" id="doctor-card" aria-labelledby="doctor-title">
+  <div class="card-header">
+    <h2 id="doctor-title">Install checks</h2>
+    {{with .Data.Doctor}}{{badge "" (printf "%s" .Status)}}{{end}}
+    <div class="actions">
+      <form method="post" action="/admin/health/doctor" class="inline" hx-post="/admin/health/doctor" hx-target="#doctor-card" hx-swap="outerHTML" hx-disabled-elt="find button">
+        {{template "csrf" $}}
+        <span class="htmx-indicator muted small">Running checks, up to 15 seconds…</span>
+        <button class="btn btn-sm" type="submit">Run checks now</button>
+      </form>
+    </div>
+  </div>
+  {{with .Data.Doctor}}
+    <ul class="checks">
+      {{range .Checks}}<li><span>{{badge "" (printf "%s" .Status)}}</span><div><span class="name mono">{{.Name}}</span><p class="small">{{.Message}}</p>{{with .FixHint}}<p class="fix">Fix: {{.}}</p>{{end}}</div></li>
+      {{end}}
+    </ul>
+    <p class="muted small">Checked {{ago .CheckedAt}} ({{fmtTime .CheckedAt}}), took {{.DurationMS}} ms. The checks also run by themselves every 10 minutes.</p>
+  {{else}}
+    <p class="muted">The checks have not run yet. They run shortly after start and then every 10 minutes, or now with the button. They look at DNS, SES, the SNS subscription, the certificate, backups, the clock and disk space.</p>
+  {{end}}
+</section>{{end}}

@@ -1,0 +1,63 @@
+{{/* A segment: filter, live counts, members, bulk tagging. .Data is
+ui.audSegmentData. */}}
+{{define "actions"}}{{with .Data}}
+<a class="btn" href="/admin/segments/{{.S.ID}}/edit">Edit</a>
+{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/segments/%d/delete" .S.ID) "Label" "Delete…" "Class" "btn-danger" "Fields" (dict "version" (printf "%d" .S.Version)))}}
+{{end}}{{end}}
+
+{{define "content"}}{{with .Data}}
+<div class="grid stats">
+  {{template "stat" (dict "Label" "Matching now" "Value" (num .Counts.Total) "Sub" "contacts in any status")}}
+  {{template "stat" (dict "Label" "Active" "Value" (num .Counts.Active) "Sub" "would get a broadcast")}}
+</div>
+{{with .Counts.MissingTags}}<div class="flash flash-warning" role="status"><p>This segment refers to {{plural (len .) "tag" "tags"}} that no longer exist: {{join . ", "}}. A "has" rule on such a tag matches nobody, and a "doesn't have" rule matches everybody. <a href="/admin/segments/{{$.Data.S.ID}}/edit">Check the rules</a>.</p></div>{{end}}
+
+<div class="grid grid-2">
+  <section class="card" aria-labelledby="seg-rules-title">
+    <h2 id="seg-rules-title">Rules</h2>
+    <p>{{.Description}}</p>
+    <details><summary class="small">Filter as JSON (for the API)</summary><pre>{{.JSON}}</pre></details>
+    <p class="muted small">Updated {{ago .S.UpdatedAt}} · created {{fmtDate .S.CreatedAt}}</p>
+  </section>
+
+  <section class="card" aria-labelledby="seg-bulk-title">
+    <h2 id="seg-bulk-title">Tag every member</h2>
+    <form method="post" action="/admin/contacts/bulk-tag">
+      {{template "csrf" $}}
+      <input type="hidden" name="segment_id" value="{{.S.ID}}">
+      <input type="hidden" name="back" value="{{.Back}}">
+      <div class="filters">
+  <div class="field"><label for="f-bulk-action">Action</label>
+    <select id="f-bulk-action" name="action"><option value="add">Add tag</option><option value="remove">Remove tag</option></select></div>
+  <div class="field grow"><label for="f-bulk-tag">Tag</label>
+    <input id="f-bulk-tag" name="tag" type="text" required list="aud-tag-list" autocomplete="off"></div>
+  <div class="field"><button class="btn" type="submit">Review</button></div>
+</div>
+    </form>
+    <p class="muted small">You see how many contacts match before anything changes. The members are taken when the job runs.</p>
+    <datalist id="aud-tag-list">{{range .Tags}}<option value="{{.}}">{{end}}</datalist>
+  </section>
+</div>
+
+<section class="mt-5" aria-labelledby="seg-members-title">
+  <div class="card-header"><h2 id="seg-members-title">Members</h2><div class="actions"><a class="btn btn-sm" href="/admin/contacts?segment_id={{.S.ID}}">Open in contacts</a></div></div>
+  <form class="filters" method="get" action="/admin/segments/{{.S.ID}}">
+    <div class="field"><label for="f-status">Status</label>
+      <select id="f-status" name="status">{{$st := .Status}}{{range .Statuses}}<option value="{{.Value}}"{{if eq .Value $st}} selected{{end}}>{{.Label}}</option>{{end}}</select></div>
+    <div class="field"><button class="btn" type="submit">Filter</button></div>
+  </form>
+  {{if .Members}}
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th scope="col">Email</th><th scope="col">Name</th><th scope="col">Status</th><th scope="col">Tags</th><th scope="col">Created</th></tr></thead>
+    <tbody>{{range .Members}}<tr>
+      <td><a href="/admin/contacts/{{.ID}}">{{.Email}}</a></td>
+      <td>{{.FirstName}} {{.LastName}}</td>
+      <td>{{badge "contact" .Status}}</td>
+      <td>{{range .Tags}}<span class="tag">{{.}}</span>{{end}}</td>
+      <td class="nowrap">{{fmtDate .CreatedAt}}</td>
+    </tr>{{end}}</tbody>
+  </table></div>
+  {{template "pager" .Pager}}
+  {{else}}<p class="muted">No contact matches{{with .Status}} with this status{{end}} right now.</p>{{end}}
+</section>
+{{end}}{{end}}

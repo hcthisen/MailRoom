@@ -1,0 +1,8 @@
+{{/* Partials shared by the pages of the Content section (files starting
+with "_" are parsed into every page of their group). */}}
+
+{{/* content-tabs: the section tabs; pass .Data.Tabs. */}}
+{{define "content-tabs"}}{{template "subnav" (dict "Label" "Content sections" "Items" .)}}{{end}}
+
+{{/* email-uses: what uses an email, from a content.EmailSummary. */}}
+{{define "email-uses"}}{{if or .UsedBySteps .UsedByBroadcasts}}{{with .UsedBySteps}}{{plural . "sequence step" "sequence steps"}}{{end}}{{if and .UsedBySteps .UsedByBroadcasts}}, {{end}}{{with .UsedByBroadcasts}}{{plural . "broadcast" "broadcasts"}}{{end}}{{else}}{{badge "" "unused"}}{{end}}{{end}}

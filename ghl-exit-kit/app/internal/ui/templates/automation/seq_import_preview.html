@@ -1,0 +1,28 @@
+{{/* The dry run of a YAML import and its confirmation (import-sequence). .Data is ui.yamlImportData with Preview set. */}}
+{{define "content"}}{{with .Data}}{{$f := .Form}}
+<section class="card confirm" aria-labelledby="confirm-title">
+  <h2 id="confirm-title">This import creates</h2>
+  {{with .Preview}}
+  <p>The sequence <strong>{{.Name}}</strong> with {{plural (len .Steps) "step" "steps"}}, and one new email per step. Nothing has been saved yet.</p>
+  {{$.Data.Summary}}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th scope="col" class="num">#</th><th scope="col">Subject</th><th scope="col">Wait</th><th scope="col">Format</th></tr></thead>
+      <tbody>
+        {{range .Steps}}<tr><td class="num">{{.Position}}</td><td>{{.Subject}}</td><td class="mono">{{.Delay}}</td><td>{{.Format}}</td></tr>{{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+  <form method="post" action="/admin/sequences/import" enctype="multipart/form-data">
+    {{template "csrf" $}}
+    <input type="hidden" name="yaml" value="{{$f.Raw "yaml"}}">
+    {{range .Files}}<input type="hidden" name="file_name" value="{{.Name}}"><input type="hidden" name="file_body" value="{{.Body}}">{{end}}
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit" name="confirm" value="yes">Import sequence</button>
+      <button class="btn" type="submit" name="edit" value="1">Back to edit</button>
+      <a class="btn btn-ghost" href="/admin/sequences">Cancel</a>
+    </div>
+  </form>
+</section>
+{{end}}{{end}}

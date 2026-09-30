@@ -1,0 +1,102 @@
+{{/* An import: the dry-run check of an upload with the button that runs
+the real import (.Data.Check), or a job's progress, polled by htmx while
+it runs, and its final report (.Data.Status). .Data is ui.audImportPage. */}}
+{{define "import-status"}}{{with .Data.Status}}<div id="import-status" aria-live="polite"{{if .Running}} hx-get="/admin/imports/{{.Job.JobID}}" hx-trigger="every 2s" hx-swap="outerHTML"{{end}}>
+  <section class="card" aria-labelledby="imp-st-title">
+    <div class="card-header"><h2 id="imp-st-title">Status</h2>{{badge "" .Job.Status}}</div>
+    {{if .Running}}
+      <meter class="quota" min="0" max="100" value="{{.Percent}}" aria-label="Progress">{{.Percent}}%</meter>
+      <p>{{.Percent}}% of the contacts written.{{if eq .Job.Status "queued"}} Waiting to start.{{end}} This page updates by itself.</p>
+    {{else if eq .Job.Status "failed"}}
+      <p class="form-error" role="alert">The import failed: {{.Job.Error}}</p>
+      {{if .Job.Report}}<p>What was written before it stopped is listed below.</p>{{end}}
+    {{else}}
+      <p>{{badge "" "ok"}} The import is complete.</p>
+    {{end}}
+    <dl class="props">
+      <dt>File</dt><dd>{{or .Job.Filename "—"}} ({{bytes .Job.SizeBytes}})</dd>
+      <dt>Existing contacts</dt><dd>{{if eq .Job.OnExisting "skip"}}left as they are{{else}}updated{{end}}</dd>
+      <dt>Started</dt><dd>{{fmtTime .Job.StartedAt}}</dd>
+      <dt>Finished</dt><dd>{{fmtTime .Job.FinishedAt}}</dd>
+      <dt>By</dt><dd>{{.Job.CreatedBy}}</dd>
+    </dl>
+  </section>
+  {{with .Job.Report}}<div class="mt-5">{{template "aud-import-report" (dict "R" . "Statuses" $.Data.Status.Statuses "Tags" $.Data.Status.Tags)}}</div>{{end}}
+</div>{{end}}{{end}}
+
+{{define "actions"}}{{if .Data.Status}}<a class="btn" href="/admin/contacts">Contacts</a> <a class="btn" href="/admin/imports">New import</a>{{end}}{{end}}
+
+{{define "content"}}{{with .Data.Check}}
+<section class="card confirm mb-5" aria-labelledby="rep-go-title">
+  <h2 id="rep-go-title">{{or .Filename "The file"}}: ready to import?</h2>
+  <p>{{plural .Report.Rows "row" "rows"}} checked. Existing contacts: {{if eq .OnExisting "skip"}}left as they are{{else}}updated{{end}}.
+  {{if .Report.RejectedCount}}Rejected rows are left out; fix them in the file and import it again if needed.{{end}}</p>
+  {{if .Embedded}}
+  <form method="post" action="/admin/imports">
+    {{template "csrf" $}}
+    <input type="hidden" name="mode" value="import">
+    <input type="hidden" name="on_existing" value="{{.OnExisting}}">
+    <input type="hidden" name="filename" value="{{.Filename}}">
+    <input type="hidden" name="csv_b64" value="{{.Embedded}}">
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Import now</button>
+      <a class="btn" href="/admin/imports">Cancel</a>
+    </div>
+  </form>
+  {{else}}
+  <form method="post" action="/admin/imports" enctype="multipart/form-data">
+    {{template "csrf" $}}
+    <input type="hidden" name="mode" value="import">
+    <input type="hidden" name="on_existing" value="{{.OnExisting}}">
+    <div class="field">
+      <label for="f-file">Choose the same file again</label>
+      <input id="f-file" name="file" type="file" required accept=".csv,text/csv,text/plain" aria-describedby="f-file-hint">
+      <p class="hint" id="f-file-hint">The file is too large to keep between the check and the import.</p>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Import now</button>
+      <a class="btn" href="/admin/imports">Cancel</a>
+    </div>
+  </form>
+  {{end}}
+  <p class="muted small">The import runs in the background; you can follow its progress. Every imported contact gets a consent record from <code>consent_source</code>.</p>
+</section>
+{{template "aud-import-report" (dict "R" .Report "Statuses" .Statuses "Tags" .Tags)}}
+{{else}}{{template "import-status" .}}{{end}}{{end}}
+
+{{/* aud-import-report: the numbers of an import report. dict R
+(imports.ImportReport), Statuses and Tags ([]audCount). */}}
+{{define "aud-import-report"}}{{$r := .R}}
+<div class="grid stats">
+  {{template "stat" (dict "Label" "Rows in the file" "Value" (num $r.Rows))}}
+  {{template "stat" (dict "Label" (or (and $r.DryRun "New contacts") "Created") "Value" (num $r.Created))}}
+  {{template "stat" (dict "Label" (or (and $r.DryRun "Would be updated") "Updated") "Value" (num $r.Updated) "Sub" (printf "%s unchanged" (num $r.Unchanged)))}}
+  {{template "stat" (dict "Label" "Left as they are" "Value" (num $r.Skipped) "Sub" "existing contacts (skip)")}}
+  {{template "stat" (dict "Label" "Rejected rows" "Value" (num $r.RejectedCount) "Level" (or (and $r.RejectedCount "warn") ""))}}
+  {{template "stat" (dict "Label" "Duplicates merged" "Value" (num $r.DuplicatesMerged))}}
+</div>
+{{if or $r.NotReactivated $r.StatusKept $r.StatusOnly}}<ul>
+  {{with $r.NotReactivated}}<li>{{plural . "existing contact stays" "existing contacts stay"}} unsubscribed, bounced, complained or pending although the file lists them as active: an import never reactivates anyone.</li>{{end}}
+  {{with $r.StatusKept}}<li>{{plural . "contact keeps its" "contacts keep their"}} status, because the file's status would make them easier to reactivate.</li>{{end}}
+  {{with $r.StatusOnly}}<li>{{plural . "rejected row still sets" "rejected rows still set"}} a status that blocks sending, so those addresses aren't left sendable.</li>{{end}}
+</ul>{{end}}
+{{with $r.Warnings}}<div class="flash flash-warning" role="status"><p><strong>Warnings about the file</strong></p><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
+<div class="grid grid-2 mt-5">
+  <section class="card" aria-labelledby="rep-status-title">
+    <h2 id="rep-status-title">Status after the import</h2>
+    {{with .Statuses}}<div class="table-wrap"><table class="table"><thead><tr><th scope="col">Status</th><th scope="col" class="num">Contacts</th></tr></thead>
+    <tbody>{{range .}}<tr><td>{{badge "contact" .Name}}</td><td class="num">{{num .Count}}</td></tr>{{end}}</tbody></table></div>{{else}}<p class="muted">No contacts.</p>{{end}}
+  </section>
+  <section class="card" aria-labelledby="rep-tag-title">
+    <h2 id="rep-tag-title">Tags in the file</h2>
+    {{with .Tags}}<div class="table-wrap"><table class="table"><thead><tr><th scope="col">Tag</th><th scope="col" class="num">Contacts</th></tr></thead>
+    <tbody>{{range .}}<tr><td><span class="tag">{{.Name}}</span></td><td class="num">{{num .Count}}</td></tr>{{end}}</tbody></table></div>{{else}}<p class="muted">The file has no tags.</p>{{end}}
+  </section>
+</div>
+{{with $r.Rejected}}<section class="card mt-5" aria-labelledby="rep-rej-title">
+  <h2 id="rep-rej-title">Rejected rows</h2>
+  <p class="muted small">Line numbers count the header as line 1.{{if gt $r.RejectedCount (len .)}} The first {{num (len .)}} of {{num $r.RejectedCount}} are listed.{{end}}</p>
+  <div class="table-wrap"><table class="table"><thead><tr><th scope="col" class="num">Line</th><th scope="col">Reason</th></tr></thead>
+  <tbody>{{range .}}<tr><td class="num">{{.Line}}</td><td>{{.Reason}}</td></tr>{{end}}</tbody></table></div>
+</section>{{end}}
+{{end}}

@@ -1,0 +1,72 @@
+# Mailroom on the server (PRD O-1, O-6). See README.md next to this file.
+#
+# This file belongs in /opt/mailroom/, next to the Mailroom source:
+#
+#   /opt/mailroom/
+#     docker-compose.yml   this file (from the kit's deploy/)
+#     app/                 the kit's app/ (source, vendored modules, Dockerfile)
+#     .env                 Mailroom's settings and the sending keys (chmod 600)
+#     data/                the database, media, backups, certificates (volume)
+#
+# so every command of the runbook (AGENTS.md) runs in /opt/mailroom/ as
+# written: docker compose build, docker compose run --rm mailroom provision
+# ses, docker compose up -d, docker compose exec mailroom mailroom ...
+name: mailroom
+
+services:
+  mailroom:
+    build:
+      context: ./app
+      args:
+        # Compiled into the binary ("mailroom version"). Set MAILROOM_VERSION
+        # in .env or the shell to label a build; default "dev".
+        VERSION: ${MAILROOM_VERSION:-dev}
+    image: mailroom:local
+    # The image's non-root user. data/ and .env must belong to it (see
+    # README.md); or set MAILROOM_UID/MAILROOM_GID in .env to run as another
+    # user that owns them.
+    user: "${MAILROOM_UID:-65532}:${MAILROOM_GID:-65532}"
+    env_file: .env
+    environment:
+      MAILROOM_DATA_DIR: /data
+    volumes:
+      - ./data:/data
+      # "mailroom provision ses" writes the sending user's keys to
+      # /opt/mailroom/.env (its default --env-file), which is this file on
+      # the host. It is read at container start through env_file.
+      - ./.env:/opt/mailroom/.env
+    ports:
+      # 443 serves HTTPS with Let's Encrypt certificates (autocert); 80
+      # answers the ACME HTTP-01 challenge and redirects to HTTPS.
+      - "80:80"
+      - "443:443"
+    restart: unless-stopped
+    # Shutdown: the HTTP server gets 20 s, then the workers 30 s.
+    stop_grace_period: 60s
+    healthcheck:
+      # The image has no shell or curl: the binary probes its own /healthz
+      # (port 80, or HTTP_ADDR with HTTP_ONLY=1).
+      test: ["CMD", "/mailroom", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  default:
+    # IPv6 on the container network, so IPv6 visitors (the AAAA record)
+    # reach Mailroom with their own address: the per-address rate limits of
+    # forms, logins and tracking key on it. Without it Docker's userland
+    # proxy forwards them from the bridge gateway, and all IPv6 visitors
+    # would share one address. Needs Docker Engine 27 or newer (ip6tables
+    # on by default); the subnet is a private ULA range used only inside
+    # the host.
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: fd4d:6169:6c72::/64

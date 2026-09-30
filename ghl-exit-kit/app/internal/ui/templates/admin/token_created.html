@@ -1,0 +1,13 @@
+{{define "content"}}{{with .Data}}
+<section class="card confirm" aria-labelledby="secret-title">
+  <h2 id="secret-title">Copy the token now</h2>
+  <div class="flash flash-warning" role="alert"><p><strong>This is the only time the token is shown.</strong> Mailroom stores only a hash of it. Put it in a password manager or the integration's secret store now; if it is lost, revoke it and create a new one.</p></div>
+    {{.Field.HTML}}
+  <dl class="props">
+    <dt>Scope</dt><dd>{{printf "%s" .Token.Scope}}</dd>
+    <dt>Expires</dt><dd>{{if .Token.ExpiresAt}}{{fmtTime .Token.ExpiresAt}}{{else}}never{{end}}</dd>
+    <dt>Use it as</dt><dd><code>Authorization: Bearer {{.Token.Prefix}}…</code></dd>
+  </dl>
+  <div class="form-actions"><a class="btn btn-primary" href="/admin/tokens">I have saved the token</a></div>
+</section>
+{{end}}{{end}}

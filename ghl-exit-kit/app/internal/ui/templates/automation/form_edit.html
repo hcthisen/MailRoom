@@ -1,0 +1,66 @@
+{{/* Create a sign-up form (create-form) or edit one (update-form). .Data is ui.webformData. */}}
+{{define "actions"}}{{with .Data.Web}}{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/forms/%d/delete" .ID) "Label" "Delete…" "Class" "btn-danger" "Fields" (dict "version" (printf "%d" .Version)))}}{{end}}{{end}}
+
+{{define "content"}}{{with .Data}}{{$f := .Form}}
+{{.Tabs}}
+<form class="form" method="post" action="{{with .Web}}/admin/forms/{{.ID}}{{else}}/admin/forms{{end}}" novalidate>
+  {{template "csrf" $}}
+  {{with .Web}}<input type="hidden" name="version" value="{{$f.Get "version"}}">{{end}}
+  {{template "form-error" $f}}
+
+  <section class="card" aria-labelledby="basics-title">
+    <h2 id="basics-title">Form</h2>
+    {{template "field" (dict "Form" $f "Name" "name" "Label" "Name" "Required" true "Hint" "Shown as the heading of the hosted page.")}}
+  </section>
+
+  <section class="card" aria-labelledby="fields-title">
+    <h2 id="fields-title">Fields</h2>
+    <p class="hint">Email is always the first field and required. Add first name, last name or a custom attribute; choose "Not used" to remove a row.</p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th scope="col">Field</th><th scope="col">Attribute key</th><th scope="col">Label</th><th scope="col">Required</th></tr></thead>
+        <tbody>
+          <tr><td>Email</td><td class="muted">—</td><td class="muted">Email</td><td>Yes</td></tr>
+          {{range .Fields}}{{$p := printf "fields[%d]." .Index}}{{$k := .Kind}}{{$i := .Index}}
+          <tr>
+            <td>
+              
+              <select id="f-fields-{{.Index}}-kind" aria-label="Field {{.Num}}" name="{{$p}}kind"{{if .Err}} aria-invalid="true" aria-describedby="f-fields-{{.Index}}-error"{{end}}>
+                <option value=""{{if eq $k ""}} selected{{end}}>Not used</option>
+                <option value="first_name"{{if eq $k "first_name"}} selected{{end}}>First name</option>
+                <option value="last_name"{{if eq $k "last_name"}} selected{{end}}>Last name</option>
+                <option value="attr"{{if eq $k "attr"}} selected{{end}}>Attribute</option>
+              </select>
+              {{with .Err}}<p class="error-text" id="f-fields-{{$i}}-error">{{.}}</p>{{end}}
+            </td>
+            <td><input aria-label="Attribute key of field {{.Num}}" id="f-fields-{{.Index}}-attr" name="{{$p}}attr" type="text" value="{{.Attr}}" placeholder="e.g. company" autocomplete="off"></td>
+            <td><input aria-label="Label of field {{.Num}}" id="f-fields-{{.Index}}-label" name="{{$p}}label" type="text" value="{{.Label}}" maxlength="100" placeholder="default from the field"></td>
+            <td><label class="check"><input type="checkbox" name="{{$p}}required" value="1" aria-label="Field {{.Num}} is required"{{if .Required}} checked{{end}}> required</label></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    <p class="hint">Custom attributes are stored on the contact under their key (1-64 letters, digits or underscores). Save to get more empty rows; at most 20 fields.</p>
+  </section>
+
+  <section class="card" aria-labelledby="after-title">
+    <h2 id="after-title">After sign-up</h2>
+    {{template "tag-input" (dict "Form" $f "Name" "tags" "Label" "Tags to add" "Optional" true "Suggestions" .Tags "Hint" "Added to everyone who signs up (after confirming, with double opt-in). Separate with commas; created if needed.")}}
+    {{template "select-field" (dict "Form" $f "Name" "sequence_id" "Label" "Start sequence" "Options" .Sequences "Hint" "New sign-ups are enrolled in it; its re-entry policy applies.")}}
+    {{template "checkbox-field" (dict "Form" $f "Name" "double_optin" "Label" "Double opt-in: send a confirmation email first" "Hint" "Off by default. When on, tags and the sequence apply only after the contact clicks the link, also for existing subscribers; unconfirmed sign-ups expire after 7 days. A form never overwrites a name or attribute a contact already has. Unsubscribed contacts who sign up again always get a confirmation email.")}}
+    {{template "field" (dict "Form" $f "Name" "redirect_url" "Label" "Thank-you page" "Type" "url" "Optional" true "Placeholder" "https://example.com/thanks" "Hint" "An https address to send people to after submitting. Empty shows Mailroom's own thank-you page.")}}
+  </section>
+
+  <section class="card" aria-labelledby="consent-title">
+    <h2 id="consent-title">Consent and website</h2>
+    {{template "textarea-field" (dict "Form" $f "Name" "consent_text" "Label" "Consent text" "Optional" true "Rows" 4 "Placeholder" .Default "Hint" "Shown on the form and stored with every sign-up. Empty uses the default text shown in the box.")}}
+    {{template "textarea-field" (dict "Form" $f "Name" "allowed_origins" "Label" "Websites that submit with JavaScript" "Optional" true "Rows" 3 "Class" "code" "Placeholder" "https://example.com" "Hint" "Only needed when your site posts the form with JavaScript (CORS). One origin per line: scheme and host, e.g. https://www.example.com. Plain HTML forms work from any site.")}}
+  </section>
+
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">{{if .Web}}Save form{{else}}Create form{{end}}</button>
+    <a class="btn" href="{{with .Web}}/admin/forms/{{.ID}}/snippet{{else}}/admin/forms{{end}}">Cancel</a>
+  </div>
+</form>
+{{end}}{{end}}

@@ -1,0 +1,9 @@
+{{define "content"}}{{with .Data}}<div class="card">
+  <p>{{.Message}}</p>
+  <p class="muted small">Error {{.Status}}</p>
+  <div class="form-actions"><a class="btn btn-primary" href="/admin/">Go to the dashboard</a></div>
+</div>{{end}}{{end}}
+
+{{/* "none" renders nothing: the body of an htmx error response, which
+carries only the out-of-band error flash. */}}
+{{define "none"}}{{end}}

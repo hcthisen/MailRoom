@@ -1,0 +1,21 @@
+{{define "content"}}{{template "job-card" $}}{{end}}
+
+{{/* job-card: one job; while it isn't done, htmx reloads it every 2 s. */}}
+{{define "job-card"}}{{with .Data}}<section class="card" id="job-card" aria-labelledby="job-title"{{if not .Job.Done}} hx-get="/admin/health/jobs/{{.Job.ID}}" hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML"{{end}}>
+  <div class="card-header"><h2 id="job-title">Status</h2>{{badge "" .Job.Status}}{{if not .Job.Done}}<span class="muted small">Updating every 2 seconds…</span>{{end}}</div>
+  {{with .Job}}
+  {{if not .Done}}<meter class="quota" min="0" max="1" value="{{.Progress}}" aria-label="Progress">{{pct .Progress}}</meter>{{end}}
+  <dl class="props">
+    <dt>Type</dt><dd class="mono">{{.Type}}</dd>
+    <dt>Progress</dt><dd>{{pct .Progress}}</dd>
+    <dt>Started by</dt><dd class="mono">{{.CreatedBy}}</dd>
+    <dt>Created</dt><dd>{{fmtTime .CreatedAt}}</dd>
+    <dt>Started</dt><dd>{{fmtTime .StartedAt}}</dd>
+    <dt>Finished</dt><dd>{{fmtTime .FinishedAt}}</dd>
+    {{with .Error}}<dt>Error</dt><dd><span class="badge badge-danger">error</span> {{.}}</dd>{{end}}
+  </dl>
+  {{end}}
+  {{with .Params}}<h3>Input</h3><pre>{{.}}</pre>{{end}}
+  {{with .Result}}<h3>Result</h3><pre>{{.}}</pre>{{end}}
+  {{if and .Job.Done (eq .Job.Type "backup")}}<p><a class="btn btn-sm" href="/admin/health/backups">Go to backups</a></p>{{end}}
+</section>{{end}}{{end}}

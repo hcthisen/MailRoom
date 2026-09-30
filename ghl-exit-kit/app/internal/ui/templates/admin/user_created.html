@@ -1,0 +1,11 @@
+{{define "content"}}{{with .Data}}
+<section class="card confirm" aria-labelledby="pw-title">
+  <h2 id="pw-title">Give {{.User.Email}} their password</h2>
+  <div class="flash flash-warning" role="alert"><p><strong>This is the only time the password is shown.</strong> Pass it on through a safe channel (a password manager, not plain email). They can change it on their user page after signing in.</p></div>
+    {{.Field.HTML}}
+  <div class="form-actions">
+    <a class="btn btn-primary" href="/admin/users">I have saved the password</a>
+    <a class="btn" href="/admin/users/{{.User.ID}}">Open the user</a>
+  </div>
+</section>
+{{end}}{{end}}

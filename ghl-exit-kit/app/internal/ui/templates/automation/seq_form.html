@@ -1,0 +1,40 @@
+{{/* Create a sequence (create-sequence) or edit its settings (update-sequence). .Data is ui.seqFormData. */}}
+{{define "content"}}{{with .Data}}{{$f := .Form}}
+{{.Tabs}}
+<form class="form card" method="post" action="{{with .Seq}}/admin/sequences/{{.ID}}{{else}}/admin/sequences{{end}}" novalidate>
+  {{template "csrf" $}}
+  {{with .Seq}}<input type="hidden" name="version" value="{{$f.Get "version"}}">{{end}}
+  {{template "form-error" $f}}
+
+  {{template "field" (dict "Form" $f "Name" "name" "Label" "Name" "Required" true "Hint" "Unique; shown in lists and in each step email's internal name.")}}
+  {{template "select-field" (dict "Form" $f "Name" "status" "Label" "Status" "Options" .Status)}}
+
+  <h2>Start and stop</h2>
+  {{template "tag-input" (dict "Form" $f "Name" "trigger_tag" "Label" "Trigger tag" "Optional" true "Suggestions" .Tags "Placeholder" "e.g. joined-community" "Hint" "Adding this tag to an active contact enrols it. Leave empty for sequences started by a form, an import or by hand. Created if it doesn't exist.")}}
+  {{template "tag-input" (dict "Form" $f "Name" "exit_tags" "Label" "Exit tags" "Optional" true "Suggestions" .Tags "Placeholder" "e.g. customer" "Hint" "A contact with any of these tags leaves before its next step. Separate tags with commas; at most 20.")}}
+  {{template "tag-input" (dict "Form" $f "Name" "exit_add_tag" "Label" "Tag to add on exit" "Optional" true "Suggestions" .Tags "Placeholder" "e.g. welcome-exited" "Hint" "Added when a contact leaves because of an exit tag or because it is no longer active (it can start another sequence).")}}
+  {{template "select-field" (dict "Form" $f "Name" "reentry" "Label" "Re-entry" "Options" .Reentry "Hint" "Whether a contact can go through the sequence again.")}}
+
+  <h2>Send window</h2>
+  <div class="field">
+    <label class="check"><input type="checkbox" id="f-send_window-own" name="send_window.own" value="1"{{if $f.Checked "send_window.own"}} checked{{end}} aria-describedby="f-send_window-own-hint"> Use a send window of its own</label>
+    <p class="hint" id="f-send_window-own-hint">Steps that fall due outside the window wait for its next opening, in the install's time zone ({{timezone}}).
+      {{with .Default}}Without one, the default from the settings applies: {{.}}.{{else}}Without one, and with no default in the settings, steps go out at any time.{{end}}</p>
+  </div>
+  <fieldset class="field choices">
+    <legend>Days</legend>
+    {{range .Days}}<label class="check"><input type="checkbox" name="send_window.days" value="{{.Value}}"{{if $f.Has "send_window.days" .Value}} checked{{end}}> {{.Label}}</label>
+    {{end}}
+    {{with $f.Err "send_window.days"}}<p class="error-text" id="f-send_window.days-error">{{.}}</p>{{end}}
+  </fieldset>
+  <div class="row">
+    {{template "field" (dict "Form" $f "Name" "send_window.start" "Label" "From" "Type" "time")}}
+    {{template "field" (dict "Form" $f "Name" "send_window.end" "Label" "Until" "Type" "time")}}
+  </div>
+
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">{{if .Seq}}Save settings{{else}}Create sequence{{end}}</button>
+    <a class="btn" href="{{with .Seq}}/admin/sequences/{{.ID}}{{else}}/admin/sequences{{end}}">Cancel</a>
+  </div>
+</form>
+{{end}}{{end}}

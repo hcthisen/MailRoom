@@ -1,0 +1,26 @@
+{{/* A form's recent submissions (list-form-submissions). .Data is ui.webformSubmissionsData. */}}
+{{define "content"}}{{with .Data}}
+{{.Tabs}}
+{{if .Items}}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr><th scope="col">When</th><th scope="col">Contact</th><th scope="col">Outcome</th></tr>
+    </thead>
+    <tbody>
+      {{range .Items}}
+      <tr>
+        <td class="nowrap" title="{{fmtTime .CreatedAt}}">{{ago .CreatedAt}}</td>
+        <td>{{if .ContactID}}<a href="/admin/contacts/{{.ContactID}}">{{or .Email "contact"}}</a>{{else}}<span class="muted">—</span>{{end}}</td>
+        <td>{{.Badge}}{{with .Note}} <span class="muted small">{{.}}</span>{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{template "pager" .Pager}}
+<p class="muted small">Every accepted submission gets the same answer on the website, also for addresses that can't be mailed, so nobody can find out who is on your list.</p>
+{{else}}
+{{template "empty" (dict "Title" "No submissions yet" "Text" "Sign-ups through this form appear here, newest first. Try it on the hosted page with a test address.")}}
+{{end}}
+{{end}}{{end}}

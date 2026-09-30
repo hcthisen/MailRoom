@@ -1,0 +1,10 @@
+{{/* Partials shared by every Broadcasts page (files starting with "_"
+are parsed into every page of their group). */}}
+{{/* audience: a broadcasts.BroadcastAudience. */}}
+{{define "audience"}}{{if eq .Type "segment"}}Segment: {{if .SegmentName}}<a href="/admin/segments/{{.SegmentID}}">{{.SegmentName}}</a>{{else}}#{{.SegmentID}}{{end}}{{else}}Everyone active{{end}}{{end}}
+
+{{/* paused-reason: broadcasts.Broadcast.PausedReason. */}}
+{{define "paused-reason"}}{{if eq . "circuit_breaker"}}by the circuit breaker{{else if eq . "snapshot_failed"}}recipient list failed{{else if eq . "manual"}}by hand{{else if eq . "ses_paused"}}SES sending paused{{else}}{{.}}{{end}}{{end}}
+
+{{/* broadcast-when: the most relevant time of a broadcast. */}}
+{{define "broadcast-when"}}{{if .FinishedAt}}{{if eq .Status "cancelled"}}Cancelled{{else}}Sent{{end}} {{fmtTime .FinishedAt}}{{else if .StartedAt}}Started {{fmtTime .StartedAt}}{{else if .ScheduledAt}}Scheduled {{fmtTime .ScheduledAt}}<br><span class="muted small">{{ago .ScheduledAt}}</span>{{else}}<span class="muted">Created {{fmtDate .CreatedAt}}</span>{{end}}{{end}}

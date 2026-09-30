@@ -1,0 +1,36 @@
+{{/* Sign-up forms (list-forms). .Data is ui.webformListData. */}}
+{{define "actions"}}<a class="btn btn-primary" href="/admin/forms/new">New form</a>{{end}}
+
+{{define "content"}}{{with .Data}}
+{{if .Items}}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th scope="col">Name</th>
+        <th scope="col">Tags</th>
+        <th scope="col">Starts sequence</th>
+        <th scope="col">Double opt-in</th>
+        <th scope="col">Created</th>
+        <th scope="col" class="actions" aria-label="Actions"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Items}}
+      <tr>
+        <td><a href="/admin/forms/{{.Form.ID}}">{{.Form.Name}}</a><br><span class="muted small mono">/f/{{.Form.PublicID}}</span></td>
+        <td>{{range .Form.Tags}}<span class="tag">{{.}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
+        <td>{{if .Form.SequenceID}}<a href="/admin/sequences/{{.Form.SequenceID}}">{{or .Sequence "Sequence"}}</a>{{else}}<span class="muted">—</span>{{end}}</td>
+        <td>{{if .Form.DoubleOptin}}{{badge "" "on"}}{{else}}{{badge "" "off"}}{{end}}</td>
+        <td class="nowrap">{{fmtDate .Form.CreatedAt}}</td>
+        <td class="actions"><a class="btn btn-sm" href="/admin/forms/{{.Form.ID}}/snippet">Embed</a> <a class="btn btn-sm btn-ghost" href="/admin/forms/{{.Form.ID}}/submissions">Submissions</a></td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{template "pager" .Pager}}
+{{else}}
+{{template "empty" (dict "Title" "No forms yet" "Text" "A form collects sign-ups on your website or on a hosted page, tags new contacts and can start a sequence." "ActionURL" "/admin/forms/new" "ActionLabel" "New form")}}
+{{end}}
+{{end}}{{end}}

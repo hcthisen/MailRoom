@@ -1,0 +1,63 @@
+{{/* Broadcast stats (B-8). .Data is ui.broadcastStatsData. */}}
+{{define "actions"}}<a class="btn" href="/admin/broadcasts/{{.Data.B.ID}}">Back to the broadcast</a>{{end}}
+
+{{define "content"}}{{with .Data}}
+<div id="stats-live"{{if .Live}} hx-get="/admin/broadcasts/{{.B.ID}}/stats" hx-trigger="every 10s" hx-select="#stats-live" hx-target="this" hx-swap="outerHTML"{{end}}>
+  <p class="muted small">{{badge "broadcast" .B.Status}}
+    {{if .Live}}Sending: these numbers refresh every 10 seconds.{{else if .B.FinishedAt}}Finished {{fmtTime .B.FinishedAt}}.{{else if .B.StartedAt}}Started {{fmtTime .B.StartedAt}}.{{else}}Not sent yet.{{end}}
+    Rates are shares of the emails sent. Test sends are not counted.</p>
+  {{with .Stats.MissingTags}}<div class="flash flash-warning" role="status"><p><strong>Check the segment:</strong> it refers to tags that don't exist ({{join . ", "}}).</p></div>{{end}}
+  <section aria-labelledby="numbers-title">
+    <h2 id="numbers-title" class="visually-hidden">Numbers</h2>
+    <div class="grid stats">
+      {{with .Stats}}
+      {{template "stat" (dict "Label" "Recipients" "Value" (num .Recipients) "Sub" (printf "%s waiting" (num .Queued)))}}
+      {{template "stat" (dict "Label" "Sent" "Value" (num .Sent) "Sub" (printf "%s failed, %s skipped" (num .Failed) (num .Skipped)))}}
+      {{template "stat" (dict "Label" "Delivered" "Value" (num .Delivered) "Sub" (pct .Rates.Delivery))}}
+      {{template "stat" (dict "Label" "Bounced" "Value" (num .Bounced) "Sub" (pct .Rates.Bounce) "Level" $.Data.BounceLevel)}}
+      {{template "stat" (dict "Label" "Complained" "Value" (num .Complained) "Sub" (pct .Rates.Complaint) "Level" $.Data.ComplaintLevel)}}
+      {{template "stat" (dict "Label" "Unsubscribed" "Value" (num .Unsubscribed) "Sub" (pct .Rates.Unsubscribe))}}
+      {{template "stat" (dict "Label" "Unique clicks" "Value" (num .UniqueClicks) "Sub" (printf "%s, %s clicks in all" (pct .Rates.Click) (num .Clicks)))}}
+      {{end}}
+    </div>
+  </section>
+</div>
+
+<section class="card" aria-labelledby="links-title">
+  <h2 id="links-title">Clicks per link</h2>
+  {{with .Stats.ClicksPerLink}}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th scope="col">Link</th><th scope="col" class="num">Recipients who clicked</th><th scope="col" class="num">All clicks</th></tr></thead>
+      <tbody>{{range .}}<tr><td class="mono small"><a href="{{.URL}}" rel="noopener noreferrer" target="_blank">{{truncate 90 .URL}}</a></td><td class="num">{{num .Unique}}</td><td class="num">{{num .Clicks}}</td></tr>{{end}}</tbody>
+    </table>
+  </div>
+  {{else}}<p class="muted">No clicks yet.</p>{{end}}
+</section>
+
+<section class="card" aria-labelledby="recipients-title">
+  <h2 id="recipients-title">Recipients</h2>
+  <form class="filters" method="get" action="/admin/broadcasts/{{.B.ID}}/stats">
+    {{template "select-field" (dict "Form" .Filter "Name" "status" "Label" "Status" "Options" .Statuses)}}
+    <button class="btn" type="submit">Filter</button>
+  </form>
+  {{if .Recipients}}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr>
+        <th scope="col">Recipient</th><th scope="col">Status</th><th scope="col">Note</th>
+        <th scope="col">Sent</th><th scope="col">Delivered</th>
+      </tr></thead>
+      <tbody>{{range .Recipients}}<tr>
+        <td>{{if .Email}}{{if .ContactID}}<a href="/admin/contacts/{{.ContactID}}">{{.Email}}</a>{{else}}{{.Email}}{{end}}{{else}}<span class="muted">erased</span>{{end}}</td>
+        <td>{{badge "message" .Status}}</td>
+        <td class="small">{{with .Error}}{{truncate 120 .}}{{else}}{{if gt .Attempts 1}}{{.Attempts}} attempts{{end}}{{end}}</td>
+        <td class="nowrap">{{fmtTime .SentAt}}</td>
+        <td class="nowrap">{{fmtTime .DeliveredAt}}</td>
+      </tr>{{end}}</tbody>
+    </table>
+  </div>
+  {{template "pager" .Pager}}
+  {{else}}<p class="muted">{{if .Filter.Get "status"}}No recipients with this status.{{else}}No recipients yet: they are added when the broadcast starts.{{end}}</p>{{end}}
+</section>
+{{end}}{{end}}

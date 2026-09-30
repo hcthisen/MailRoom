@@ -1,0 +1,37 @@
+{{/* The Broadcasts list. .Data is ui.broadcastListData. */}}
+{{define "actions"}}<a class="btn" href="/admin/layout">Base layout</a>
+<a class="btn btn-primary" href="/admin/broadcasts/new">New broadcast</a>{{end}}
+
+{{define "content"}}{{with .Data}}
+<nav class="row filters" aria-label="Filter by status">
+  {{range .Statuses}}<a class="btn btn-sm{{if eq .Value $.Data.Status}} btn-primary{{end}}" href="/admin/broadcasts{{with .Value}}?status={{.}}{{end}}"{{if eq .Value $.Data.Status}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}
+</nav>
+
+{{if .Items}}
+<div class="table-wrap">
+  <table class="table">
+    <thead><tr>
+      <th scope="col">Name</th>
+      <th scope="col">Status</th>
+      <th scope="col">Audience</th>
+      <th scope="col">When</th>
+      <th scope="col" class="num">Recipients</th>
+    </tr></thead>
+    <tbody>
+    {{range .Items}}<tr>
+      <td><a href="/admin/broadcasts/{{.ID}}"><strong>{{.Name}}</strong></a><br><span class="muted small">{{truncate 80 .Email.Subject}}</span></td>
+      <td>{{badge "broadcast" .Status}}{{if .PausedReason}}<br><span class="muted small">{{template "paused-reason" .PausedReason}}</span>{{end}}</td>
+      <td>{{template "audience" .Audience}}</td>
+      <td class="nowrap">{{template "broadcast-when" .}}</td>
+      <td class="num">{{if .RecipientsTotal}}{{num .RecipientsTotal}}{{else}}<span class="muted">—</span>{{end}}</td>
+    </tr>{{end}}
+    </tbody>
+  </table>
+</div>
+{{template "pager" .Pager}}
+{{else if .Status}}
+{{template "empty" (dict "Title" "No broadcasts with this status" "Text" "Pick another status above, or see all broadcasts." "ActionURL" "/admin/broadcasts" "ActionLabel" "Show all")}}
+{{else}}
+{{template "empty" (dict "Title" "No broadcasts yet" "Text" "A broadcast is one email to everyone active or to a segment. Write it, send yourself a test, then send it now or schedule it." "ActionURL" "/admin/broadcasts/new" "ActionLabel" "New broadcast")}}
+{{end}}
+{{end}}{{end}}

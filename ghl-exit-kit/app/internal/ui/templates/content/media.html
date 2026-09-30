@@ -1,0 +1,53 @@
+{{/* Uploaded images (list-media, upload-media, delete-media). .Data is
+ui.mediaListData. */}}
+{{define "content"}}{{with .Data}}
+{{template "content-tabs" .Tabs}}
+<section class="card mb-5" aria-labelledby="up-title">
+  <h2 id="up-title">Upload an image</h2>
+  <form method="post" action="/admin/media" enctype="multipart/form-data">
+    {{template "csrf" $}}
+    {{template "form-error" .Form}}
+    <div class="field">
+      <label for="f-file">Image file</label>
+      <input id="f-file" name="file" type="file" required accept="image/png,image/jpeg,image/gif,image/webp"{{if .Form.Err "file"}} aria-invalid="true" aria-describedby="f-file-error"{{else}} aria-describedby="f-file-hint"{{end}}>
+      {{with .Form.Err "file"}}<p class="error-text" id="f-file-error">{{.}}</p>{{else}}<p class="hint" id="f-file-hint">PNG, JPEG, GIF or WebP, at most 5 MiB. For a logo, about 400 pixels wide works well.</p>{{end}}
+    </div>
+    <button class="btn btn-primary" type="submit">Upload</button>
+  </form>
+</section>
+
+{{if .Items}}
+<div class="table-wrap">
+  <table class="table">
+    <thead><tr>
+      <th scope="col" aria-label="Preview"></th>
+      <th scope="col">Image</th>
+      <th scope="col">Address</th>
+      <th scope="col">Uploaded</th>
+      <th scope="col" aria-label="Actions"></th>
+    </tr></thead>
+    <tbody>
+    {{range .Items}}<tr>
+      <td><img class="media-thumb" src="{{.URL}}" alt="" loading="lazy"></td>
+      <td>{{.Filename}}<br><span class="muted small">{{bytes .SizeBytes}}</span></td>
+      <td><div class="copy-field">
+        <input id="media-url-{{.ID}}" class="mono small" type="text" readonly value="{{.URL}}" aria-label="Address of {{.Filename}}">
+        <button class="btn btn-sm" type="button" data-copy="#media-url-{{.ID}}" hidden>Copy</button>
+      </div></td>
+      <td class="nowrap">{{fmtDate .CreatedAt}}</td>
+      <td class="actions">
+        <form method="post" action="/admin/media/{{.ID}}/delete" class="inline">
+          {{template "csrf" $}}
+          <button class="btn btn-sm btn-ghost" type="submit" aria-label="Delete {{.Filename}}">Delete…</button>
+        </form>
+      </td>
+    </tr>{{end}}
+    </tbody>
+  </table>
+</div>
+{{template "pager" .Pager}}
+<p class="muted small mt-3">In a Markdown email, an image is <code>![Description](address)</code>. As the logo, paste the address into the <a href="/admin/layout">base layout</a>.</p>
+{{else}}
+{{template "empty" (dict "Title" "No images yet" "Text" "Upload your logo or an image, then use its address in an email or the base layout.")}}
+{{end}}
+{{end}}{{end}}

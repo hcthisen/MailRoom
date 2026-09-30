@@ -1,0 +1,68 @@
+{{/* Contact list with search, filters and bulk tagging. .Data is
+ui.audContactsData. */}}
+{{define "actions"}}<a class="btn" href="/admin/imports">Import CSV</a>
+<a class="btn btn-primary" href="/admin/contacts/new">New contact</a>{{end}}
+
+{{define "content"}}{{with .Data}}
+{{.Tabs}}
+<form class="filters" method="get" action="/admin/contacts" role="search" aria-label="Filter contacts">
+  <div class="field grow">
+    <label for="f-q">Search</label>
+    <input id="f-q" name="q" type="search" value="{{.Filter.Get "q"}}" placeholder="Email or name" maxlength="254">
+  </div>
+  {{template "select-field" (dict "Form" .Filter "Name" "status" "Label" "Status" "Options" .Statuses)}}
+  <div class="field">
+    <label for="f-tag">Tag</label>
+    <input id="f-tag" name="tag" type="text" value="{{.Filter.Get "tag"}}" list="aud-tag-list" autocomplete="off"{{if .Filter.Err "tag"}} aria-invalid="true" aria-describedby="f-tag-error"{{end}}>
+    {{with .Filter.Err "tag"}}<p class="error-text" id="f-tag-error">{{.}}</p>{{end}}
+  </div>
+  {{template "select-field" (dict "Form" .Filter "Name" "segment_id" "Label" "Segment" "Options" .Segments)}}
+  {{template "field" (dict "Form" .Filter "Name" "created_after" "Label" "Created from" "Type" "date")}}
+  {{template "field" (dict "Form" .Filter "Name" "created_before" "Label" "Created until" "Type" "date")}}
+  <div class="field">
+    <button class="btn" type="submit">Filter</button>
+    {{if .Filtered}}<a class="btn btn-ghost" href="/admin/contacts">Clear</a>{{end}}
+  </div>
+</form>
+{{template "form-error" .Filter}}
+<datalist id="aud-tag-list">{{range .Tags}}<option value="{{.}}">{{end}}</datalist>
+
+{{if .Contacts}}
+<form id="aud-bulk" method="post" action="/admin/contacts/bulk-tag">
+  {{template "csrf" $}}
+  <input type="hidden" name="back" value="{{.Back}}">
+</form>
+<div class="table-wrap"><table class="table">
+  <thead><tr>
+    <th scope="col"><span class="visually-hidden">Select</span></th>
+    <th scope="col">Email</th><th scope="col">Name</th><th scope="col">Status</th><th scope="col">Tags</th><th scope="col">Created</th>
+  </tr></thead>
+  <tbody>
+  {{range .Contacts}}<tr>
+    <td><input type="checkbox" name="contact_ids" value="{{.ID}}" form="aud-bulk" aria-label="Select {{.Email}}"></td>
+    <td><a href="/admin/contacts/{{.ID}}">{{.Email}}</a></td>
+    <td>{{.FirstName}} {{.LastName}}</td>
+    <td>{{badge "contact" (printf "%s" .Status)}}</td>
+    <td>{{range .Tags}}<span class="tag">{{.}}</span>{{end}}</td>
+    <td class="nowrap">{{fmtDate .CreatedAt}}</td>
+  </tr>{{end}}
+  </tbody>
+</table></div>
+{{template "pager" .Pager}}
+<section class="card mt-5" aria-labelledby="bulk-title">
+  <h2 id="bulk-title">Tag the selected contacts</h2>
+  <div class="filters">
+  <div class="field"><label for="f-bulk-action">Action</label>
+    <select id="f-bulk-action" name="action" form="aud-bulk"><option value="add">Add tag</option><option value="remove">Remove tag</option></select></div>
+  <div class="field grow"><label for="f-bulk-tag">Tag</label>
+    <input id="f-bulk-tag" name="tag" type="text" required list="aud-tag-list" autocomplete="off" form="aud-bulk"></div>
+  <div class="field"><button class="btn" type="submit" form="aud-bulk">Review</button></div>
+</div>
+  <p class="muted small">Tick contacts in the table first. You see how many are affected before anything changes. To tag a whole segment, open the segment.</p>
+</section>
+{{else if .Filtered}}
+{{template "empty" (dict "Title" "No contacts match" "Text" "Try a shorter search or fewer filters." "ActionURL" "/admin/contacts" "ActionLabel" "Show all contacts")}}
+{{else}}
+{{template "empty" (dict "Title" "No contacts yet" "Text" "Add one by hand, import a CSV file, or let a form collect them." "ActionURL" "/admin/imports" "ActionLabel" "Import a CSV file")}}
+{{end}}
+{{end}}{{end}}

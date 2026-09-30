@@ -1,0 +1,42 @@
+{{/* A sequence's enrollments (list-sequence-enrollments) with manual exit (unenroll-sequence-contact). .Data is ui.enrListData. */}}
+{{define "actions"}}<a class="btn btn-primary" href="/admin/sequences/{{.Data.Seq.ID}}/enroll">Enrol contacts</a>{{end}}
+
+{{define "content"}}{{with .Data}}{{$seq := .Seq}}
+{{.Tabs}}
+<form class="filters" method="get" action="/admin/sequences/{{.Seq.ID}}/enrollments">
+  {{template "select-field" (dict "Form" .Filter "Name" "status" "Label" "Status" "Options" .Options)}}
+  <button class="btn" type="submit">Filter</button>
+</form>
+{{if .Items}}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th scope="col">Contact</th>
+        <th scope="col">Status</th>
+        <th scope="col">Next step</th>
+        <th scope="col">Source</th>
+        <th scope="col">Started</th>
+        <th scope="col" class="actions" aria-label="Actions"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Items}}
+      <tr>
+        <td><a href="/admin/contacts/{{.ContactID}}">{{.Email}}</a></td>
+        <td>{{badge "" .Status}}{{with .ExitReason}}<br><span class="muted small">{{if eq . "not_active"}}no longer active{{else if eq . "exit_tag"}}exit tag{{else if eq . "manual"}}ended by hand{{else if eq . "step_deleted"}}step deleted{{else if eq . "sequence_deleted"}}sequence deleted{{else if eq . "unsubscribed_sequence"}}stopped these emails{{else}}{{.}}{{end}}</span>{{end}}</td>
+        <td>{{if eq .Status "active"}}{{with .NextStepPosition}}Step {{.}}{{end}}{{with .NextRunAt}}<br><span class="muted small" title="{{fmtTime .}}">due {{ago .}}</span>{{end}}{{else}}<span class="muted">{{with .FinishedAt}}finished {{fmtDate .}}{{else}}—{{end}}</span>{{end}}</td>
+        <td class="small">{{.Source}}</td>
+        <td class="nowrap" title="{{fmtTime .StartedAt}}">{{ago .StartedAt}}</td>
+        <td class="actions">{{if eq .Status "active"}}{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/sequences/%d/enrollments/%d/exit" $seq.ID .ID) "Label" "End…" "Class" "btn-sm btn-ghost" "Fields" (dict "email" .Email))}}{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{template "pager" .Pager}}
+{{else}}
+{{if .Status}}{{template "empty" (dict "Title" "No enrollments with this status" "Text" "Choose another status, or all.")}}
+{{else}}{{template "empty" (dict "Title" "Nobody is enrolled yet" "Text" "Contacts are enrolled by the trigger tag, a form, an import, the API, or by hand." "ActionURL" (printf "/admin/sequences/%d/enroll" .Seq.ID) "ActionLabel" "Enrol contacts")}}{{end}}
+{{end}}
+{{end}}{{end}}

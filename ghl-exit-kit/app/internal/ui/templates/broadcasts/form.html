@@ -1,0 +1,46 @@
+{{/* New and edit broadcast. .Data is ui.broadcastFormData. The block
+"audience-count" is the live count under the audience picker. */}}
+{{define "content"}}{{with .Data}}
+<form method="post" action="{{.Action}}" novalidate>
+  {{template "csrf" $}}
+  {{with .Form.Get "version"}}<input type="hidden" name="version" value="{{.}}">{{end}}
+  {{template "form-error" .Form}}
+
+  <div class="grid grid-2">
+    <section class="card" aria-labelledby="details-title">
+      <h2 id="details-title">Details</h2>
+      {{template "field" (dict "Form" .Form "Name" "name" "Label" "Name" "Required" true "Hint" "Only you see this, e.g. October newsletter.")}}
+      {{template "select-field" (dict "Form" .Form "Name" "audience" "Label" "Audience" "Options" .Audiences "Hint" "Only active contacts receive broadcasts. Unsubscribed, bounced and suppressed addresses are always left out.")}}
+      <div id="audience-count" class="small" aria-live="polite"
+           hx-get="/admin/broadcasts/audience-count" hx-trigger="load, change from:#f-audience"
+           hx-include="#f-audience" hx-target="this" hx-swap="innerHTML" hx-sync="this:replace">
+        <p class="muted">Counting recipients…</p>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="sender-title">
+      <h2 id="sender-title">Sender</h2>
+      {{template "field" (dict "Form" .Form "Name" "from_name" "Label" "From name" "Optional" true "Autocomplete" "off" "Placeholder" .DefaultFromName "Hint" (printf "Leave empty for the default from the settings: %s <%s>." (or .DefaultFromName "(none)") (or .FromEmail "no From address set")))}}
+      {{template "field" (dict "Form" .Form "Name" "reply_to" "Label" "Reply-To address" "Type" "email" "Optional" true "Autocomplete" "off" "Placeholder" .DefaultReplyTo "Hint" (printf "Must be on %s. Leave empty for the default: %s." (or .Domain "the sending domain") (or .DefaultReplyTo "no Reply-To")))}}
+      {{template "checkbox-field" (dict "Form" .Form "Name" "no_reply_to" "Label" "Send without a Reply-To address" "Hint" "Replies then go to the From address.")}}
+    </section>
+  </div>
+
+  <section class="card" aria-labelledby="content-title">
+    <h2 id="content-title">Content</h2>
+    {{template "email-editor" (dict "Form" .Form)}}
+  </section>
+
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">{{if .Broadcast}}Save changes{{else}}Save draft{{end}}</button>
+    <a class="btn" href="{{if .Broadcast}}/admin/broadcasts/{{.Broadcast.ID}}{{else}}/admin/broadcasts{{end}}">Cancel</a>
+    <span class="muted small">Nothing is sent when you save.</span>
+  </div>
+</form>
+{{end}}{{end}}
+
+{{define "audience-count"}}{{with .Data}}{{if .Error}}<p class="error-text" role="alert">{{.Error}}</p>{{else}}
+<p>About <strong>{{num .Active}}</strong> {{if eq .Active 1}}active contact{{else}}active contacts{{end}} {{if .Segment}}in this segment{{else}}in total{{end}} right now.
+<span class="muted">The exact number, without suppressed addresses, is shown before you send.</span></p>
+{{with .MissingTags}}<div class="form-error" role="alert"><strong>Check the segment:</strong> it refers to tags that don't exist ({{join . ", "}}). Rules on them match nobody, or everybody for "doesn't have".</div>{{end}}
+{{end}}{{end}}{{end}}

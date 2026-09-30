@@ -1,0 +1,43 @@
+{{/* The email library (list-emails). .Data is ui.emailListData. */}}
+{{define "actions"}}<a class="btn btn-primary" href="/admin/emails/new">New email</a>{{end}}
+
+{{define "content"}}{{with .Data}}
+{{template "content-tabs" .Tabs}}
+<form class="filters" method="get" action="/admin/emails" role="search">
+  <div class="field grow">
+    <label for="f-q">Search</label>
+    <input id="f-q" name="q" type="search" value="{{.Query}}" maxlength="200" placeholder="Name or subject">
+  </div>
+  <button class="btn" type="submit">Search</button>
+  {{if .Query}}<a class="btn btn-ghost" href="/admin/emails">Clear</a>{{end}}
+</form>
+
+{{if .Items}}
+<div class="table-wrap">
+  <table class="table">
+    <thead><tr>
+      <th scope="col">Email</th>
+      <th scope="col">Used by</th>
+      <th scope="col">Format</th>
+      <th scope="col" class="num">Size</th>
+      <th scope="col">Changed</th>
+    </tr></thead>
+    <tbody>
+    {{range .Items}}<tr>
+      <td><a href="/admin/emails/{{.ID}}"><strong>{{or .Name .Subject}}</strong></a>{{if .Name}}<br><span class="muted small">{{truncate 80 .Subject}}</span>{{end}}</td>
+      <td>{{template "email-uses" .}}</td>
+      <td>{{if eq .Format "html"}}HTML{{else}}Markdown{{end}}</td>
+      <td class="num nowrap">{{bytes .BodyBytes}}</td>
+      <td class="nowrap">{{ago .UpdatedAt}}</td>
+    </tr>{{end}}
+    </tbody>
+  </table>
+</div>
+{{template "pager" .Pager}}
+<p class="muted small mt-3">Broadcast and step emails are easiest to change on their broadcast or sequence page. An unused email can be deleted on its own page.</p>
+{{else if .Query}}
+{{template "empty" (dict "Title" "No email matches" "Text" "No email's name or subject contains this text." "ActionURL" "/admin/emails" "ActionLabel" "Show all")}}
+{{else}}
+{{template "empty" (dict "Title" "No emails yet" "Text" "Emails are created with broadcasts and sequence steps, or here as stand-alone drafts." "ActionURL" "/admin/emails/new" "ActionLabel" "New email")}}
+{{end}}
+{{end}}{{end}}

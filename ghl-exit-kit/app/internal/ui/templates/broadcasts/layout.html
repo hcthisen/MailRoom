@@ -1,0 +1,35 @@
+{{/* The base layout editor (E-1, E-4). .Data is ui.layoutData. */}}
+{{define "content"}}{{with .Data}}
+{{template "subnav" (dict "Label" "Content sections" "Items" .Tabs)}}
+<form method="post" action="/admin/layout" novalidate>
+  {{template "csrf" $}}
+  {{with .Form.Get "version"}}<input type="hidden" name="version" value="{{.}}">{{end}}
+  {{template "form-error" .Form}}
+  <div class="editor">
+    <div>
+      {{template "field" (dict "Form" .Form "Name" "logo_url" "Label" "Logo URL" "Type" "url" "Optional" true "Autocomplete" "off" "Placeholder" "https://…/logo.png" "Hint" "An absolute https address of the logo shown at the top, e.g. the address of an image uploaded under Content, Images. Leave empty for no logo.")}}
+      {{template "field" (dict "Form" .Form "Name" "brand_color" "Label" "Brand colour" "Placeholder" "#2563eb" "Autocomplete" "off" "Hint" "A colour like #1a2b3c, used for the top border and the links. Leave empty for the default blue.")}}
+      <div class="field">
+        <span class="label">Footer</span>
+        <p class="small">{{with .Footer}}{{.}}{{else}}<span class="muted">No footer text set.</span>{{end}}</p>
+        <p class="hint">The footer text comes from the <a href="/admin/settings">settings</a> (company footer). The unsubscribe link is always added under it.</p>
+      </div>
+      {{template "textarea-field" (dict "Form" .Form "Name" "custom_html" "Label" "Custom HTML layout" "Optional" true "Class" "code" "Rows" 16 "Hint" "Replaces the built-in responsive layout. It must contain {{content}} once, a link to {{unsubscribe_url}} and {{footer}} (your company name and address from the settings, required in marketing email), and may use {{preheader}}, {{logo_url}} and {{brand_color}}. Leave empty to use the built-in layout (recommended).")}}
+    </div>
+    <section class="card preview-panel" aria-labelledby="layout-preview-title">
+      <div class="card-header"><h2 id="layout-preview-title">Preview</h2><span class="htmx-indicator muted small">Updating…</span></div>
+      <div id="layout-preview" aria-live="polite"
+           hx-post="/admin/layout/preview"
+           hx-trigger="load, input changed delay:700ms from:closest form, change from:closest form"
+           hx-include="closest form" hx-target="this" hx-swap="innerHTML" hx-sync="this:replace">
+        <p class="muted">The preview appears here.</p>
+      </div>
+      <p class="muted small">Sample content in the layout as it is in the form (not saved yet). Links in the preview don't work.</p>
+    </section>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">Save layout</button>
+    <a class="btn" href="/admin/emails">Cancel</a>
+  </div>
+</form>
+{{end}}{{end}}

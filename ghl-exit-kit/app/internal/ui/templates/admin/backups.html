@@ -1,0 +1,34 @@
+{{define "actions"}}<form method="post" action="/admin/health/backups" class="inline">{{template "csrf" $}}<button class="btn btn-primary" type="submit">Take a backup now</button></form>{{end}}
+
+{{define "content"}}{{with .Data}}
+{{.Tabs.HTML}}
+<section class="card" aria-labelledby="schedule-title">
+  <h2 id="schedule-title">Schedule</h2>
+  {{with .Schedule}}<dl class="props">
+    <dt>Nightly backup</dt><dd>every day at {{.LocalTime}} ({{.Timezone}})</dd>
+    <dt>Next run</dt><dd>{{fmtTime .NextRunAt}} ({{ago .NextRunAt}})</dd>
+    <dt>Kept</dt><dd>{{.RetentionDays}} days on the server</dd>
+    <dt>Off-site copy</dt><dd>{{with .S3Bucket}}uploaded to the S3 bucket <span class="mono">{{.}}</span>{{else}}none: set BACKUP_BUCKET to upload each backup to S3{{end}}</dd>
+  </dl>{{end}}
+  <p class="muted small">A backup file contains every contact and the users' password hashes. Keep downloaded copies somewhere safe. To restore one, stop Mailroom and run <code>mailroom restore &lt;file&gt;</code>; you also need <code>secret.key</code> and the <code>media/</code> folder from the data volume.</p>
+</section>
+
+<section aria-labelledby="files-title">
+  <h2 id="files-title">Backup files</h2>
+  {{if .Items}}
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th scope="col">File</th><th scope="col">Taken</th><th scope="col" class="num">Size</th><th scope="col"><span class="visually-hidden">Download</span></th></tr></thead>
+    <tbody>
+      {{range .Items}}<tr>
+        <td class="mono">{{.Name}}</td>
+        <td>{{fmtTime .CreatedAt}} <span class="muted small">({{ago .CreatedAt}})</span></td>
+        <td class="num">{{bytes .SizeBytes}}</td>
+        <td class="actions"><a class="btn btn-sm" href="/admin/health/backups/{{.Name}}" download>Download</a></td>
+      </tr>{{end}}
+    </tbody>
+  </table></div>
+  {{else}}
+    {{template "empty" (dict "Title" "No backups yet" "Text" "The first nightly backup runs at the time above. Take one now with the button at the top.")}}
+  {{end}}
+</section>
+{{end}}{{end}}

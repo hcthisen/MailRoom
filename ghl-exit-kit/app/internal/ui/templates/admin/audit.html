@@ -1,0 +1,32 @@
+{{define "content"}}{{with .Data}}
+{{.Tabs.HTML}}
+{{template "form-error" .Filter}}
+<form class="filters" method="get" action="/admin/health/audit" role="search" novalidate>
+  {{template "field" (dict "Form" .Filter "Name" "operation" "Label" "Operation" "Placeholder" "e.g. settings.update")}}
+  {{template "field" (dict "Form" .Filter "Name" "actor" "Label" "Actor" "Placeholder" "email, token name or user:1")}}
+  {{template "field" (dict "Form" .Filter "Name" "target_type" "Label" "Target type" "Placeholder" "e.g. contact")}}
+  {{template "field" (dict "Form" .Filter "Name" "target_id" "Label" "Target ID")}}
+  {{template "field" (dict "Form" .Filter "Name" "since" "Label" "From" "Type" "datetime-local")}}
+  {{template "field" (dict "Form" .Filter "Name" "until" "Label" "Before" "Type" "datetime-local")}}
+  <button class="btn" type="submit">Filter</button>
+  <a class="btn btn-ghost" href="/admin/health/audit">Clear</a>
+</form>
+<p class="muted small">Times are in {{timezone}}.</p>
+{{if .Items}}
+<div class="table-wrap"><table class="table">
+  <thead><tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">Operation</th><th scope="col">Target</th><th scope="col">Changes</th></tr></thead>
+  <tbody>
+    {{range .Items}}<tr>
+      <td class="nowrap">{{fmtTime .CreatedAt}}</td>
+      <td>{{with .Actor}}{{if .Name}}{{.Name}}{{else}}{{.Type}}{{end}} <span class="muted small mono">{{.Type}}{{with .ID}}:{{.}}{{end}}</span>{{end}}</td>
+      <td class="mono">{{.Operation}}</td>
+      <td class="mono small">{{.TargetType}}{{with .TargetID}} {{.}}{{end}}</td>
+      <td>{{with .Changes}}{{if gt (len .) 160}}<details><summary class="small mono">{{truncate 80 .}}</summary><pre>{{.}}</pre></details>{{else}}<code class="small">{{.}}</code>{{end}}{{end}}</td>
+    </tr>{{end}}
+  </tbody>
+</table></div>
+{{template "pager" .Pager}}
+{{else}}
+  {{template "empty" (dict "Title" "No entries" "Text" "No audit log entries match these filters.")}}
+{{end}}
+{{end}}{{end}}

@@ -1,0 +1,30 @@
+{{define "content"}}{{with .Data}}
+{{.Tabs.HTML}}
+<div class="stack">
+<div class="table-wrap"><table class="table">
+  <thead><tr><th scope="col">Email</th><th scope="col">Name</th><th scope="col">Two-factor</th><th scope="col">Last signed in</th><th scope="col">Added</th></tr></thead>
+  <tbody>
+    {{range .Items}}<tr>
+      <td><a href="/admin/users/{{.ID}}">{{.Email}}</a>{{if eq .ID $.Data.Me}} <span class="tag">you</span>{{end}}</td>
+      <td>{{.Name}}</td>
+      <td>{{if .TOTPEnabled}}{{badge "" "on"}}{{else}}{{badge "" "off"}}{{end}}</td>
+      <td>{{if .LastLoginAt}}{{ago .LastLoginAt}}{{else}}<span class="muted">never</span>{{end}}</td>
+      <td>{{fmtDate .CreatedAt}}</td>
+    </tr>{{end}}
+  </tbody>
+</table></div>
+{{template "pager" .Pager}}
+
+<section class="card" aria-labelledby="new-user-title">
+  <h2 id="new-user-title">Add a user</h2>
+  {{template "form-error" .Form}}
+  <form method="post" action="/admin/users" class="form" novalidate>
+    {{template "csrf" $}}
+    {{template "field" (dict "Form" .Form "Name" "email" "Label" "Email" "Type" "email" "Required" true "Autocomplete" "off" "Hint" "They sign in with this address.")}}
+    {{template "field" (dict "Form" .Form "Name" "name" "Label" "Name" "Optional" true "Autocomplete" "off")}}
+    {{template "field" (dict "Form" .Form "Name" "password" "Label" "Password" "Type" "password" "Optional" true "Autocomplete" "new-password" "Hint" "At least 12 characters. Leave empty to generate a strong one, shown once on the next page.")}}
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Add user</button></div>
+  </form>
+</section>
+</div>
+{{end}}{{end}}

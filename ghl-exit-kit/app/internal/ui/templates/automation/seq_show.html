@@ -1,0 +1,75 @@
+{{/* A sequence: settings summary, numbers and steps with per-step stats (get-sequence, get-sequence-stats). .Data is ui.seqShowData. */}}
+{{define "actions"}}{{with .Data.Seq}}{{$v := printf "%d" .Version}}
+{{if eq .Status "paused"}}{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/sequences/%d/resume" .ID) "Label" "Resume" "Class" "btn-primary" "Fields" (dict "version" $v))}}
+{{else}}{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/sequences/%d/pause" .ID) "Label" "Pause" "Class" "" "Fields" (dict "version" $v))}}{{end}}
+{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/sequences/%d/delete" .ID) "Label" "Delete…" "Class" "btn-danger")}}
+{{end}}{{end}}
+
+{{define "content"}}{{with .Data}}{{$seq := .Seq}}
+{{.Tabs}}
+
+{{if eq .Seq.Status "paused"}}<div class="flash flash-warning" role="status"><p><strong>This sequence is paused.</strong> Enrollments keep their place and new ones are accepted, but no step is sent until you resume it.</p></div>{{end}}
+
+<div class="grid grid-2">
+  <section class="card" aria-labelledby="summary-title">
+    <div class="card-header"><h2 id="summary-title">How it runs</h2><div class="actions"><a class="btn btn-sm" href="/admin/sequences/{{.Seq.ID}}/edit">Edit settings</a></div></div>
+    {{.Summary}}
+  </section>
+  <section class="card" aria-labelledby="numbers-title">
+    <div class="card-header"><h2 id="numbers-title">Enrollments</h2><div class="actions"><a class="btn btn-sm" href="/admin/sequences/{{.Seq.ID}}/enroll">Enrol contacts</a></div></div>
+    {{if .StatsErr}}<p class="muted">The numbers could not be read right now.</p>{{else}}
+    <div class="grid stats">
+      {{template "stat" (dict "Label" "Active" "Value" (num .Stats.Active) "Sub" "in progress")}}
+      {{template "stat" (dict "Label" "Completed" "Value" (num .Stats.Completed) "Sub" "received every step")}}
+      {{template "stat" (dict "Label" "Exited" "Value" (num .Stats.Exited) "Sub" "left early")}}
+    </div>
+    <p class="small"><a href="/admin/sequences/{{.Seq.ID}}/enrollments">See who is enrolled</a></p>
+    {{end}}
+  </section>
+</div>
+
+<section class="card" aria-labelledby="steps-title" id="steps">
+  <div class="card-header"><h2 id="steps-title">Steps</h2><div class="actions"><a class="btn btn-sm btn-primary" href="/admin/sequences/{{.Seq.ID}}/steps/new">Add step</a></div></div>
+  {{if .Steps}}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col" class="num">#</th>
+          <th scope="col">Email and timing</th>
+          <th scope="col" class="num" title="Active enrollments whose next step is this one">Waiting</th>
+          <th scope="col" class="num">Sent</th>
+          <th scope="col" class="num">Delivered</th>
+          <th scope="col" class="num">Bounced</th>
+          <th scope="col" class="num" title="Unique contacts who clicked a link">Clicked</th>
+          <th scope="col" class="num">Unsub.</th>
+          <th scope="col" class="actions" aria-label="Actions"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Steps}}
+        <tr>
+          <td class="num">{{.Step.Position}}</td>
+          <td><a href="/admin/sequences/{{$seq.ID}}/steps/{{.Step.ID}}">{{.Step.Subject}}</a>{{if eq .Step.Format "html"}} <span class="muted small">HTML</span>{{end}}<br><span class="muted small">{{.When}}</span></td>
+          <td class="num">{{num .Stats.Waiting}}</td>
+          <td class="num">{{num .Stats.Sent}}{{if .Stats.Queued}}<br><span class="muted small">{{num .Stats.Queued}} queued</span>{{end}}</td>
+          <td class="num">{{num .Stats.Delivered}}</td>
+          <td class="num">{{num .Stats.Bounced}}{{if .Stats.Complained}}<br><span class="muted small">{{num .Stats.Complained}} spam</span>{{end}}</td>
+          <td class="num">{{num .Stats.Clicked}}</td>
+          <td class="num">{{num .Stats.Unsubscribed}}</td>
+          <td class="actions">
+            {{if not .First}}<form method="post" action="/admin/sequences/{{$seq.ID}}/steps/{{.Step.ID}}/move" class="inline">{{template "csrf" $}}<input type="hidden" name="version" value="{{$seq.Version}}"><input type="hidden" name="dir" value="up"><button class="btn btn-sm btn-ghost" type="submit" aria-label="Move step {{.Step.Position}} up" title="Move up">↑</button></form>{{end}}
+            {{if not .Last}}<form method="post" action="/admin/sequences/{{$seq.ID}}/steps/{{.Step.ID}}/move" class="inline">{{template "csrf" $}}<input type="hidden" name="version" value="{{$seq.Version}}"><input type="hidden" name="dir" value="down"><button class="btn btn-sm btn-ghost" type="submit" aria-label="Move step {{.Step.Position}} down" title="Move down">↓</button></form>{{end}}
+            <a class="btn btn-sm" href="/admin/sequences/{{$seq.ID}}/steps/{{.Step.ID}}" aria-label="Edit step {{.Step.Position}}">Edit</a>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">Delays count from when the previous step was queued. Test sends are not counted.</p>
+  {{else}}
+  {{template "empty" (dict "Title" "No steps yet" "Text" "Nobody can be enrolled until the sequence has at least one step." "ActionURL" (printf "/admin/sequences/%d/steps/new" .Seq.ID) "ActionLabel" "Add the first step")}}
+  {{end}}
+</section>
+{{end}}{{end}}

@@ -1,0 +1,35 @@
+{{/* New contact (create-contact) or edit names and attributes
+(update-contact). .Data is ui.audContactFormData. */}}
+{{define "content"}}{{with .Data}}
+<form class="form card" method="post" action="{{with .Contact}}/admin/contacts/{{.ID}}/edit{{else}}/admin/contacts{{end}}">
+  {{template "csrf" $}}
+  {{template "form-error" .Form}}
+  {{if .Contact}}
+    <input type="hidden" name="version" value="{{.Form.Get "version"}}">
+    <p class="muted">The email address and status can't be changed here: change the status on the contact's page.</p>
+  {{else}}
+    {{template "field" (dict "Form" .Form "Name" "email" "Label" "Email" "Type" "email" "Required" true "Autocomplete" "off" "Inputmode" "email")}}
+  {{end}}
+  <div class="grid grid-2">
+    {{template "field" (dict "Form" .Form "Name" "first_name" "Label" "First name" "Optional" true "Autocomplete" "off")}}
+    {{template "field" (dict "Form" .Form "Name" "last_name" "Label" "Last name" "Optional" true "Autocomplete" "off")}}
+  </div>
+  {{if not .Contact}}
+    {{template "select-field" (dict "Form" .Form "Name" "status" "Label" "Status" "Options" .Statuses "Hint" "Active contacts receive email. Use another status for someone who already unsubscribed or bounced elsewhere.")}}
+    {{template "tag-input" (dict "Form" .Form "Name" "tags" "Label" "Tags" "Optional" true "Suggestions" .Tags "Hint" "Separate tags with commas. A tag can start a sequence.")}}
+  {{end}}
+  {{template "textarea-field" (dict "Form" .Form "Name" "attributes" "Label" "Attributes" "Optional" true "Class" "code" "Rows" 5 "Placeholder" "company: Acme" "Hint" "One per line as key: value. Keys are letters, digits and underscores. true, false and plain numbers are stored as such; put text that looks like one in quotes, e.g. \"42\". Remove a line to delete that attribute.")}}
+  {{if not .Contact}}
+  <fieldset class="field plain-fieldset">
+    <legend class="label">Consent <span class="optional">(optional)</span></legend>
+    <p class="hint">Recorded in the contact's consent log with your name. Fill it in when you add someone who agreed elsewhere, e.g. on paper.</p>
+    {{template "field" (dict "Form" .Form "Name" "consent.source" "Label" "Where consent was given" "Optional" true "Placeholder" "e.g. trade fair 2026")}}
+    {{template "textarea-field" (dict "Form" .Form "Name" "consent.text" "Label" "What they agreed to" "Optional" true "Rows" 3)}}
+  </fieldset>
+  {{end}}
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">{{if .Contact}}Save{{else}}Create contact{{end}}</button>
+    <a class="btn" href="{{with .Contact}}/admin/contacts/{{.ID}}{{else}}/admin/contacts{{end}}">Cancel</a>
+  </div>
+</form>
+{{end}}{{end}}

@@ -1,0 +1,46 @@
+{{/* Tag list with counts and the create form. .Data is ui.audTagsData. */}}
+{{define "content"}}{{with .Data}}
+{{.Tabs}}
+<div class="grid grid-2 mb-5">
+  <section class="card" aria-labelledby="t-new-title">
+    <h2 id="t-new-title">New tag</h2>
+    <form method="post" action="/admin/tags">
+      {{template "csrf" $}}
+      {{template "form-error" .Create}}
+      <div class="filters mb-0">
+        <div class="field grow">
+          <label for="f-name">Name</label>
+          <input id="f-name" name="name" type="text" required maxlength="64" value="{{.Create.Get "name"}}"{{if .Create.Err "name"}} aria-invalid="true" aria-describedby="f-name-error"{{end}}>
+          {{with .Create.Err "name"}}<p class="error-text" id="f-name-error">{{.}}</p>{{end}}
+        </div>
+        <div class="field"><button class="btn btn-primary" type="submit">Create</button></div>
+      </div>
+    </form>
+    <p class="muted small">Adding a tag to a contact creates it too. Create one here to use it as a sequence trigger first.</p>
+  </section>
+  <section class="card" aria-labelledby="t-find-title">
+    <h2 id="t-find-title">Find</h2>
+    <form class="filters mb-0" method="get" action="/admin/tags" role="search">
+      <div class="field grow"><label for="f-q">Name contains</label><input id="f-q" name="q" type="search" value="{{.Q}}" maxlength="64"></div>
+      <div class="field"><button class="btn" type="submit">Search</button>{{if .Q}} <a class="btn btn-ghost" href="/admin/tags">Clear</a>{{end}}</div>
+    </form>
+  </section>
+</div>
+
+{{if .Tags}}
+<div class="table-wrap"><table class="table">
+  <thead><tr><th scope="col">Tag</th><th scope="col" class="num">Contacts</th><th scope="col">Created</th><th scope="col"><span class="visually-hidden">Links</span></th></tr></thead>
+  <tbody>{{range .Tags}}<tr>
+    <td><a href="/admin/tags/{{.ID}}">{{.Name}}</a></td>
+    <td class="num">{{num .Contacts}}</td>
+    <td class="nowrap">{{fmtDate .CreatedAt}}</td>
+    <td class="actions"><a class="btn btn-sm btn-ghost" href="/admin/contacts?tag={{.Name}}">Contacts</a></td>
+  </tr>{{end}}</tbody>
+</table></div>
+{{template "pager" .Pager}}
+{{else if .Q}}
+{{template "empty" (dict "Title" "No tag matches" "Text" "Try another name." "ActionURL" "/admin/tags" "ActionLabel" "Show all tags")}}
+{{else}}
+{{template "empty" (dict "Title" "No tags yet" "Text" "Tags are created when you add them to contacts, import them from a CSV file, or create them above.")}}
+{{end}}
+{{end}}{{end}}

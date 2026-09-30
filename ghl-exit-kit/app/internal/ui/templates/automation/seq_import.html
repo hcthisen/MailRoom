@@ -1,0 +1,26 @@
+{{/* YAML import form (import-sequence; the first submit is a dry run). .Data is ui.yamlImportData. */}}
+{{define "content"}}{{with .Data}}{{$f := .Form}}
+<form class="form card" method="post" action="/admin/sequences/import" enctype="multipart/form-data" novalidate>
+  {{template "csrf" $}}
+  {{template "form-error" $f}}
+  {{template "textarea-field" (dict "Form" $f "Name" "yaml" "Label" "Sequence YAML" "Rows" 16 "Class" "code" "Placeholder" "name: Community welcome\ntrigger:\n  tag: joined-community\nsteps:\n  - delay: \"0\"\n    subject: Welcome!\n    body_file: 01-welcome.md" "Hint" "Paste the definition, or leave this empty and choose a .yaml file below. Delays are 0 or a whole number with a unit: 90m, 36h, 2d.")}}
+  <div class="field">
+    <label for="f-files">Files <span class="optional">(optional)</span></label>
+    <input id="f-files" name="files" type="file" multiple accept=".md,.markdown,.html,.htm,.txt,.yaml,.yml,text/*"{{if $f.Err "files"}} aria-invalid="true" aria-describedby="f-files-error"{{else}} aria-describedby="f-files-hint"{{end}}>
+    {{with $f.Err "files"}}<p class="error-text" id="f-files-error">{{.}}</p>{{else}}<p class="hint" id="f-files-hint">The email bodies named by <code>body_file</code>, and optionally the .yaml file itself. Choose several at once.</p>{{end}}
+  </div>
+  {{with .Files}}
+  <div class="field">
+    <p class="label">Files already added</p>
+    <ul>{{range .}}<li><span class="mono">{{.Name}}</span> <span class="muted small">({{bytes (len .Body)}})</span>
+      <input type="hidden" name="file_name" value="{{.Name}}"><input type="hidden" name="file_body" value="{{.Body}}"></li>{{end}}</ul>
+    <p class="hint">Choosing a file with the same name again replaces it.</p>
+  </div>
+  {{end}}
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">Check</button>
+    <a class="btn" href="/admin/sequences">Cancel</a>
+  </div>
+  <p class="muted small">Checking changes nothing: the next page shows what would be created, and you import from there. A name that already exists is refused.</p>
+</form>
+{{end}}{{end}}

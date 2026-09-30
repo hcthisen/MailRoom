@@ -1,0 +1,37 @@
+{{/* Shared page blocks. */}}
+
+{{/* pager: a ui.Pager (from ui.Paginate) under a table. */}}
+{{define "pager"}}{{if or .NextURL .FirstURL}}<nav class="pager" aria-label="Pages">
+  <span class="muted">{{plural .Count "item" "items"}} on this page</span>
+  {{with .FirstURL}}<a class="btn btn-sm" href="{{.}}">First page</a>{{end}}
+  {{with .NextURL}}<a class="btn btn-sm" href="{{.}}" rel="next">Next page</a>{{end}}
+</nav>{{end}}{{end}}
+
+{{/* empty: dict Title, Text, and optionally ActionURL + ActionLabel. */}}
+{{define "empty"}}<div class="empty">
+  <h2>{{.Title}}</h2>
+  {{with .Text}}<p>{{.}}</p>{{end}}
+  {{with .ActionURL}}<a class="btn btn-primary" href="{{.}}">{{$.ActionLabel}}</a>{{end}}
+</div>{{end}}
+
+{{/* stat: dict Label, Value, Sub (optional), Level ("", "warn" or "danger"). */}}
+{{define "stat"}}<div class="stat{{with .Level}} is-{{.}}{{end}}">
+  <p class="label">{{.Label}}</p>
+  <p class="value">{{.Value}}</p>
+  {{with .Sub}}<p class="sub">{{.}}</p>{{end}}
+</div>{{end}}
+
+{{/* post-button: a one-button form for a non-destructive POST (pause,
+resume, duplicate). dict CSRF, Action, Label, Class (optional), Fields
+(optional map[string]string of hidden fields). Destructive actions use
+the confirm pattern (ui.Confirm) instead. */}}
+{{define "post-button"}}<form method="post" action="{{.Action}}" class="inline">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  {{range $k, $v := .Fields}}<input type="hidden" name="{{$k}}" value="{{$v}}">{{end}}
+  <button class="btn {{or .Class "btn-sm"}}" type="submit">{{.Label}}</button>
+</form>{{end}}
+
+{{/* subnav: in-page section tabs. dict Label (the nav's accessible
+name) and Items ([]ui.SubnavItem); the current item gets
+aria-current="page". */}}
+{{define "subnav"}}<nav class="subnav" aria-label="{{.Label}}">{{range .Items}}<a class="btn btn-sm" href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}</nav>{{end}}

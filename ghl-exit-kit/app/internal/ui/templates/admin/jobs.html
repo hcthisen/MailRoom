@@ -1,0 +1,31 @@
+{{define "content"}}{{with .Data}}
+{{.Tabs.HTML}}
+<form class="filters" method="get" action="/admin/health/jobs" role="search">
+  <div class="field grow">
+    <label for="f-type">Type</label>
+    <input id="f-type" name="type" type="text" maxlength="64" value="{{.Filter.Get "type"}}" placeholder="e.g. backup or import.contacts">
+  </div>
+  {{template "select-field" (dict "Form" .Filter "Name" "status" "Label" "Status" "Options" .Statuses)}}
+  <button class="btn" type="submit">Filter</button>
+  {{if or (.Filter.Get "type") (.Filter.Get "status")}}<a class="btn btn-ghost" href="/admin/health/jobs">Clear</a>{{end}}
+</form>
+{{if .Items}}
+<div class="table-wrap"><table class="table">
+  <thead><tr><th scope="col" class="num">ID</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col" class="num">Progress</th><th scope="col">Started by</th><th scope="col">Created</th><th scope="col">Finished</th></tr></thead>
+  <tbody>
+    {{range .Items}}<tr>
+      <td class="num"><a href="/admin/health/jobs/{{.ID}}">{{.ID}}</a></td>
+      <td class="mono">{{.Type}}</td>
+      <td>{{badge "" .Status}}{{with .Error}} <span class="small muted" title="{{.}}">{{truncate 60 .}}</span>{{end}}</td>
+      <td class="num">{{pct .Progress}}</td>
+      <td class="mono small">{{.CreatedBy}}</td>
+      <td>{{fmtTime .CreatedAt}}</td>
+      <td>{{fmtTime .FinishedAt}}</td>
+    </tr>{{end}}
+  </tbody>
+</table></div>
+{{template "pager" .Pager}}
+{{else}}
+  {{template "empty" (dict "Title" "No jobs" "Text" "Imports, broadcast snapshots, backups and bulk changes run as background jobs and are listed here.")}}
+{{end}}
+{{end}}{{end}}

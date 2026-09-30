@@ -1,0 +1,48 @@
+{{/* email-editor: the content fields of an email with a live preview.
+Put it inside the page's <form>. dict:
+  Form        *ui.Form with subject, preheader, format and body
+  PreviewURL  optional; default /admin/preview/email (render-email)
+The preview posts the enclosing form (htmx, CSRF header from <body>) on
+load and while typing, and shows the rendered HTML in a sandboxed iframe. */}}
+{{define "email-editor"}}<div class="editor">
+  <div>
+    <div class="field">
+      <label for="f-subject">Subject</label>
+      <input id="f-subject" name="subject" type="text" required maxlength="300" value="{{.Form.Get "subject"}}"{{if .Form.Err "subject"}} aria-invalid="true" aria-describedby="f-subject-error"{{else}} aria-describedby="f-subject-hint"{{end}}>
+      {{if .Form.Err "subject"}}<p class="error-text" id="f-subject-error">{{.Form.Err "subject"}}</p>{{else}}<p class="hint" id="f-subject-hint">Merge fields work here too, e.g. {{"{{first_name | \"there\"}}"}}.</p>{{end}}
+    </div>
+    <div class="field">
+      <label for="f-preheader">Preheader <span class="optional">(optional)</span></label>
+      <input id="f-preheader" name="preheader" type="text" maxlength="300" value="{{.Form.Get "preheader"}}"{{if .Form.Err "preheader"}} aria-invalid="true" aria-describedby="f-preheader-error"{{else}} aria-describedby="f-preheader-hint"{{end}}>
+      {{if .Form.Err "preheader"}}<p class="error-text" id="f-preheader-error">{{.Form.Err "preheader"}}</p>{{else}}<p class="hint" id="f-preheader-hint">The preview text most inboxes show after the subject.</p>{{end}}
+    </div>
+    <fieldset class="field choices">
+      <legend>Format</legend>
+      {{$f := or (.Form.Get "format") "markdown"}}
+      <label class="check"><input type="radio" name="format" value="markdown"{{if eq $f "markdown"}} checked{{end}}> Markdown</label>
+      <label class="check"><input type="radio" name="format" value="html"{{if eq $f "html"}} checked{{end}}> HTML</label>
+      {{with .Form.Err "format"}}<p class="error-text">{{.}}</p>{{end}}
+    </fieldset>
+    <div class="field">
+      <label for="f-body">Body</label>
+      <textarea id="f-body" name="body" class="code" required spellcheck="true"{{if .Form.Err "body"}} aria-invalid="true" aria-describedby="f-body-error"{{else}} aria-describedby="f-body-hint"{{end}}>{{.Form.Raw "body"}}</textarea>
+      {{if .Form.Err "body"}}<p class="error-text" id="f-body-error">{{.Form.Err "body"}}</p>{{else}}<p class="hint" id="f-body-hint">Wrapped in the base layout with the unsubscribe footer when sent. Merge fields: {{"{{first_name}}"}}, {{"{{last_name}}"}}, {{"{{email}}"}}, {{"{{attr.key}}"}}, with a fallback after a bar: {{"{{first_name | \"there\"}}"}}.</p>{{end}}
+    </div>
+  </div>
+  <section class="card preview-panel" aria-labelledby="preview-title">
+    <div class="card-header"><h2 id="preview-title">Preview</h2><span class="htmx-indicator muted small">Updating…</span></div>
+    <div id="email-preview" aria-live="polite"
+         hx-post="{{or .PreviewURL "/admin/preview/email"}}"
+         hx-trigger="load, input changed delay:700ms from:closest form, change from:closest form"
+         hx-include="closest form" hx-target="this" hx-swap="innerHTML" hx-sync="this:replace">
+      <p class="muted">The preview appears here.</p>
+    </div>
+  </section>
+</div>{{end}}
+
+{{/* email-preview: the fragment the preview action returns. .Data is
+ui.previewData. The HTML is escaped into srcdoc (the browser decodes it);
+sandbox without allow-scripts/allow-same-origin keeps the email inert. */}}
+{{define "email-preview"}}{{with .Data}}{{if .Error}}<p class="preview-error" role="alert">{{.Error}}</p>{{else}}<div class="preview-meta"><span class="muted">Subject</span><strong>{{.Subject}}</strong></div>
+<iframe class="preview-frame" title="Email preview" sandbox="" referrerpolicy="no-referrer" loading="lazy" srcdoc="{{.HTML}}"></iframe>
+<details><summary class="small">Plain-text version</summary><pre>{{.Text}}</pre></details>{{end}}{{end}}{{end}}

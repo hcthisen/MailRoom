@@ -1,0 +1,40 @@
+{{/* Sequences list (list-sequences with get-sequence-stats). .Data is ui.seqListData. */}}
+{{define "actions"}}<a class="btn" href="/admin/sequences/import">Import YAML</a>
+<a class="btn btn-primary" href="/admin/sequences/new">New sequence</a>{{end}}
+
+{{define "content"}}{{with .Data}}
+{{if .Items}}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th scope="col">Name</th>
+        <th scope="col">Status</th>
+        <th scope="col">Trigger</th>
+        <th scope="col" class="num">Steps</th>
+        <th scope="col" class="num">Active</th>
+        <th scope="col" class="num">Completed</th>
+        <th scope="col" class="num">Exited</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Items}}
+      <tr>
+        <td><a href="/admin/sequences/{{.Seq.ID}}">{{.Seq.Name}}</a>{{with .Window}}<br><span class="muted small">Sends {{.}}</span>{{end}}</td>
+        <td>{{badge "" .Seq.Status}}</td>
+        <td>{{with .Seq.TriggerTag}}tag <span class="tag">{{.}}</span>{{else}}<span class="muted">forms, imports or by hand</span>{{end}}</td>
+        <td class="num">{{len .Seq.Steps}}</td>
+        {{if .StatsErr}}<td class="num muted" colspan="3">unavailable</td>{{else}}
+        <td class="num">{{num .Stats.Active}}</td>
+        <td class="num">{{num .Stats.Completed}}</td>
+        <td class="num">{{num .Stats.Exited}}</td>{{end}}
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{template "pager" .Pager}}
+{{else}}
+{{template "empty" (dict "Title" "No sequences yet" "Text" "A sequence sends a series of emails, each a set time after the previous one. Create one here, or import one written in YAML." "ActionURL" "/admin/sequences/new" "ActionLabel" "New sequence")}}
+{{end}}
+{{end}}{{end}}

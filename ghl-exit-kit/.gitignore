@@ -1,0 +1,6 @@
+.env
+.env.*
+!.env.example
+secrets/
+ghl-export/**/*.json
+ghl-export/**/*.csv

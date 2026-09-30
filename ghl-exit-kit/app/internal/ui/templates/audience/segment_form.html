@@ -1,0 +1,129 @@
+{{/* New / edit segment: name and the filter builder with a live preview.
+.Data is ui.audSegmentFormData. */}}
+{{define "content"}}{{with .Data}}
+<form class="form" method="post" action="{{.Action}}" id="segment-form" novalidate>
+  {{/* The first submit button is what Enter in a text field presses: save. */}}
+  <button type="submit" class="visually-hidden" tabindex="-1" aria-hidden="true">Save segment</button>
+  {{template "csrf" $}}
+  {{template "form-error" .Form}}
+  {{with .Segment}}<input type="hidden" name="version" value="{{$.Data.Form.Get "version"}}">{{end}}
+  <div class="grid grid-2 mb-5 align-start">
+    <div class="card">
+      {{template "field" (dict "Form" .Form "Name" "name" "Label" "Name" "Required" true "Hint" "For example: Customers without VIP. Names are unique.")}}
+    </div>
+    <section class="card" aria-labelledby="seg-preview-title">
+      <div class="card-header"><h2 id="seg-preview-title">Live preview</h2></div>
+      <div id="segment-preview" aria-live="polite"
+           hx-post="/admin/segments/preview"
+           hx-trigger="load, input changed delay:600ms from:closest form, change from:closest form"
+           hx-include="closest form" hx-target="this" hx-swap="innerHTML" hx-sync="this:replace">
+        <p class="muted">The count appears here.</p>
+      </div>
+      <p class="muted small">Segments are evaluated whenever they are used: a broadcast takes its recipients when it starts sending. Only active contacts receive broadcasts.</p>
+    </section>
+  </div>
+  <section class="card" aria-labelledby="rules-title">
+    <h2 id="rules-title">Rules</h2>
+    <div id="segment-builder">{{template "segment-builder" .Builder}}</div>
+  </section>
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">Save segment</button>
+    <a class="btn" href="{{with .Segment}}/admin/segments/{{.ID}}{{else}}/admin/segments{{end}}">Cancel</a>
+  </div>
+</form>
+{{end}}{{end}}
+
+{{/* The segment builder (ui.audBuilderData) and its live preview
+(ui.audPreviewData). Input names are the filter paths the segments
+service uses in its validation errors. The buttons post the whole form
+with an "edit" value: htmx sends it to /admin/segments/builder and swaps
+the builder; without JavaScript the form's own action re-renders the page. */}}
+
+{{define "segment-builder"}}{{template "seg-group" (dict "N" .Root "B" .)}}
+<datalist id="seg-tag-list">{{range .Tags}}<option value="{{.}}">{{end}}</datalist>{{end}}
+
+{{define "seg-edit-button"}}<button class="btn btn-sm{{with .Class}} {{.}}{{end}}" type="submit" name="edit" value="{{.Edit}}"
+  hx-post="/admin/segments/builder" hx-target="#segment-builder" hx-swap="innerHTML"{{with .Aria}} aria-label="{{.}}"{{end}}>{{.Label}}</button>{{end}}
+
+{{define "seg-group"}}{{$n := .N}}{{$b := .B}}
+<fieldset class="seg-group{{if gt $n.Depth 1}} card{{end}}">
+  {{if gt $n.Depth 1}}<legend>Group {{$n.Number}}</legend>
+  <input type="hidden" name="{{$n.Name "kind"}}" value="group">{{end}}
+  <div class="row mb-3">
+    <label for="{{$n.ID "match"}}">{{if eq $n.Depth 1}}Contacts that match{{else}}Match{{end}}</label>
+    <select id="{{$n.ID "match"}}" name="{{$n.Name "match"}}" class="auto">
+      {{range $b.Matches}}<option value="{{.Value}}"{{if eq .Value $n.Match}} selected{{end}}>{{.Label}}</option>{{end}}
+    </select>
+    <span>of these rules</span>
+    {{if gt $n.Depth 1}}<span class="spacer"></span>{{template "seg-edit-button" (dict "Edit" (printf "remove:%s" $n.Path) "Label" "Remove group" "Class" "btn-ghost" "Aria" (printf "Remove group %s" $n.Number))}}{{end}}
+  </div>
+  {{with $n.RuleErr}}<p class="error-text" role="alert">{{.}}</p>{{end}}
+  {{range $n.Rules}}{{if .Group}}{{template "seg-group" (dict "N" . "B" $b)}}{{else}}{{template "seg-cond" (dict "N" . "B" $b)}}{{end}}
+  {{else}}<p class="muted">{{if eq $n.Depth 1}}No rules yet: every contact matches.{{else}}This group has no rules.{{end}}</p>{{end}}
+  <div class="row mt-2">
+    {{template "seg-edit-button" (dict "Edit" (printf "add-condition:%s" $n.Path) "Label" "Add condition" "Aria" (printf "Add condition to %s" (or (and (gt $n.Depth 1) (printf "group %s" $n.Number)) "the filter")))}}
+    {{if $n.CanNest}}{{template "seg-edit-button" (dict "Edit" (printf "add-group:%s" $n.Path) "Label" "Add group" "Aria" (printf "Add group to %s" (or (and (gt $n.Depth 1) (printf "group %s" $n.Number)) "the filter")))}}{{end}}
+  </div>
+</fieldset>{{end}}
+
+{{/* seg-input: one input of a condition. dict N (node), M (member),
+Label, Type, Value, Placeholder, List, Optional, Min, Max. */}}
+{{define "seg-input"}}{{$n := .N}}<div class="field">
+  <label for="{{$n.ID .M}}">{{.Label}}{{if .Optional}} <span class="optional">(optional)</span>{{end}}</label>
+  <input id="{{$n.ID .M}}" name="{{$n.Name .M}}" type="{{or .Type "text"}}" value="{{.Value}}"{{with .Placeholder}} placeholder="{{.}}"{{end}}{{with .List}} list="{{.}}" autocomplete="off"{{end}}{{with .Min}} min="{{.}}"{{end}}{{with .Max}} max="{{.}}"{{end}}{{if $n.Err .M}} aria-invalid="true" aria-describedby="{{$n.ID .M}}-error"{{end}}>
+  {{with $n.Err .M}}<p class="error-text" id="{{$n.ID $.M}}-error">{{.}}</p>{{end}}
+</div>{{end}}
+
+{{/* seg-select: dict N, M, Label, Options, Value, Refresh (re-render the
+builder on change: the field and operator selects). */}}
+{{define "seg-select"}}{{$n := .N}}{{$v := .Value}}<div class="field">
+  <label for="{{$n.ID .M}}">{{.Label}}</label>
+  <select id="{{$n.ID .M}}" name="{{$n.Name .M}}"{{if .Refresh}} hx-post="/admin/segments/builder" hx-trigger="change" hx-target="#segment-builder" hx-swap="innerHTML"{{end}}{{if $n.Err .M}} aria-invalid="true" aria-describedby="{{$n.ID .M}}-error"{{end}}>
+    {{range .Options}}<option value="{{.Value}}"{{if eq .Value $v}} selected{{end}}>{{.Label}}</option>{{end}}
+  </select>
+  {{with $n.Err .M}}<p class="error-text" id="{{$n.ID $.M}}-error">{{.}}</p>{{end}}
+</div>{{end}}
+
+{{define "seg-cond"}}{{$n := .N}}{{$b := .B}}
+<div class="filters seg-cond" role="group" aria-label="Rule {{$n.Number}}">
+  <input type="hidden" name="{{$n.Name "kind"}}" value="condition">
+  {{template "seg-select" (dict "N" $n "M" "field" "Label" (printf "Rule %s" $n.Number) "Options" $b.Fields "Value" $n.Field "Refresh" true)}}
+  {{if $n.Shows "key"}}{{template "seg-input" (dict "N" $n "M" "key" "Label" "Attribute" "Value" $n.Key "Placeholder" "e.g. plan")}}{{end}}
+  {{template "seg-select" (dict "N" $n "M" "op" "Label" "Condition" "Options" $n.Ops "Value" $n.Op "Refresh" true)}}
+  {{if $n.Shows "value"}}
+    {{if eq $n.Field "status"}}{{template "seg-select" (dict "N" $n "M" "value" "Label" "Status" "Options" $b.Statuses "Value" $n.Value)}}
+    {{else if eq $n.Field "created_at"}}{{template "seg-input" (dict "N" $n "M" "value" "Label" (printf "Date and time (%s)" timezone) "Type" "datetime-local" "Value" $n.Value)}}
+    {{else if eq $n.Field "tag"}}{{template "seg-input" (dict "N" $n "M" "value" "Label" "Tag" "Value" $n.Value "List" "seg-tag-list" "Placeholder" "e.g. customer")}}
+    {{else if eq $n.Field "email"}}{{template "seg-input" (dict "N" $n "M" "value" "Label" "Text" "Value" $n.Value "Placeholder" "e.g. @example.com")}}
+    {{else}}{{template "seg-input" (dict "N" $n "M" "value" "Label" "Value" "Value" $n.Value)}}{{end}}
+  {{end}}
+  {{if $n.Shows "value_type"}}{{template "seg-select" (dict "N" $n "M" "value_type" "Label" "Compare as" "Options" $b.ValueTypes "Value" $n.ValueType)}}{{end}}
+  {{if $n.Shows "values"}}{{template "seg-input" (dict "N" $n "M" "values" "Label" "Tags, separated by commas" "Value" $n.Values "Placeholder" "e.g. customer, vip")}}{{end}}
+  {{if $n.Shows "days"}}{{template "seg-input" (dict "N" $n "M" "days" "Label" "Days" "Type" "number" "Value" $n.Days "Min" "1" "Max" "3650")}}{{end}}
+  {{if $n.Shows "url"}}{{template "seg-input" (dict "N" $n "M" "url" "Label" "Link URL" "Type" "url" "Value" $n.URL "Placeholder" "https://" "Optional" (eq $n.Op "no_click"))}}{{end}}
+  {{if $n.Shows "broadcast_id"}}{{template "seg-input" (dict "N" $n "M" "broadcast_id" "Label" "In broadcast ID" "Type" "number" "Value" $n.BroadcastID "Min" "1" "Optional" true)}}{{end}}
+  {{if $n.Shows "within_days"}}{{template "seg-input" (dict "N" $n "M" "within_days" "Label" "In the last … days" "Type" "number" "Value" $n.WithinDays "Min" "1" "Max" "3650" "Optional" true)}}{{end}}
+  <div class="field">{{template "seg-edit-button" (dict "Edit" (printf "remove:%s" $n.Path) "Label" "Remove" "Class" "btn-ghost" "Aria" (printf "Remove rule %s" $n.Number))}}</div>
+  {{with $n.RuleErr}}<p class="error-text" role="alert">{{.}}</p>{{end}}
+</div>{{end}}
+
+{{/* segment-preview-body: the live count and sample. */}}
+{{define "segment-preview-body"}}{{if .Error}}<p class="muted">Complete the rules to see the count.</p>
+<p class="preview-error" role="status">{{.Error}}</p>
+{{else if .Counted}}{{with .P}}
+<div class="grid stats mb-3">
+  {{template "stat" (dict "Label" "Matching now" "Value" (num .Total) "Sub" "in any status")}}
+  {{template "stat" (dict "Label" "Active" "Value" (num .Active) "Sub" "would get a broadcast")}}
+</div>
+{{with .MissingTags}}<div class="flash flash-warning" role="status"><p>No tag is named {{join . ", "}}. A "has" rule on it matches nobody, and a "doesn't have" rule matches everybody.</p></div>{{end}}
+{{if .Sample}}<p class="small muted mb-1">Newest matching contacts</p>
+<ul class="sample-list">{{range .Sample}}<li><a href="/admin/contacts/{{.ID}}">{{.Email}}</a>{{if ne .Status "active"}} {{badge "contact" .Status}}{{end}}</li>{{end}}</ul>
+{{else}}<p class="muted">No contact matches these rules right now.</p>{{end}}
+{{end}}{{else}}<p class="muted">The count appears here.</p>{{end}}{{end}}
+
+{{define "segment-preview"}}{{template "segment-preview-body" .Data}}{{end}}
+
+{{/* segment-builder-response: the builder after an edit, and the preview
+out of band. */}}
+{{define "segment-builder-response"}}{{with .Data}}{{template "segment-builder" .Builder}}
+<div id="segment-preview" hx-swap-oob="innerHTML">{{template "segment-preview-body" .Preview}}</div>{{end}}{{end}}

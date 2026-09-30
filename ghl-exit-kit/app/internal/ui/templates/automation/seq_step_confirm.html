@@ -1,0 +1,22 @@
+{{/* Confirmation of a step delete or move that may ask what happens to active enrollments (S-7). .Data is ui.stepChoice. */}}
+{{define "content"}}{{with .Data}}<section class="card confirm{{if .Danger}} is-danger{{end}}" aria-labelledby="confirm-title">
+  <h2 id="confirm-title">Please confirm</h2>
+  {{with .Message}}<p>{{.}}</p>{{end}}
+  {{with .Details}}<ul>{{range .}}<li>{{.}}</li>{{end}}</ul>{{end}}
+  <form method="post" action="{{.Action}}">
+    {{template "csrf" $}}
+    {{range $k, $v := .Fields}}<input type="hidden" name="{{$k}}" value="{{$v}}">{{end}}
+    <input type="hidden" name="confirm" value="yes">
+    {{if .Choice}}{{$name := .Choice}}{{$def := .Default}}
+    <fieldset class="field choices">
+      <legend>What happens to them?</legend>
+      {{range .Options}}<label class="check"><input type="radio" name="{{$name}}" value="{{.Value}}"{{if eq .Value $def}} checked{{end}}> {{.Label}}</label>
+      {{end}}
+    </fieldset>
+    {{end}}
+    <div class="form-actions">
+      <button class="btn {{if .Danger}}btn-danger{{else}}btn-primary{{end}}" type="submit">{{.ConfirmLabel}}</button>
+      <a class="btn" href="{{.CancelURL}}">Cancel</a>
+    </div>
+  </form>
+</section>{{end}}{{end}}

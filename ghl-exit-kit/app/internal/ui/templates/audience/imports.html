@@ -1,0 +1,39 @@
+{{/* CSV upload (checked first with a dry run) and the list of imports.
+.Data is ui.audImportsData. */}}
+{{define "content"}}{{with .Data}}
+{{.Tabs}}
+<section class="card" aria-labelledby="imp-up-title">
+  <h2 id="imp-up-title">Upload a CSV file</h2>
+  <form method="post" action="/admin/imports" enctype="multipart/form-data">
+    {{template "csrf" $}}
+    <input type="hidden" name="mode" value="check">
+    {{template "form-error" .Form}}
+    <div class="field">
+      <label for="f-file">CSV file</label>
+      <input id="f-file" name="file" type="file" required accept=".csv,text/csv,text/plain"{{if .Form.Err "file"}} aria-invalid="true" aria-describedby="f-file-error"{{else}} aria-describedby="f-file-hint"{{end}}>
+      {{with .Form.Err "file"}}<p class="error-text" id="f-file-error">{{.}}</p>{{else}}<p class="hint" id="f-file-hint">At most 50 MB. A header row with <code>email</code> and optionally <code>first_name</code>, <code>last_name</code>, <code>status</code>, <code>tags</code> (separated by <code>;</code>), <code>consent_source</code>, <code>consent_date</code> and <code>attr.&lt;key&gt;</code> columns.</p>{{end}}
+    </div>
+    {{template "select-field" (dict "Form" .Form "Name" "on_existing" "Label" "Contacts that already exist" "Options" .Options "Hint" "Either way, an unsubscribed, bounced or complained status in the file is applied, and nobody is ever reactivated.")}}
+    <button class="btn btn-primary" type="submit">Check file</button>
+    <p class="muted small">Checking changes nothing: you see what the import would do and then decide.</p>
+  </form>
+</section>
+
+<section class="mt-5" aria-labelledby="imp-list-title">
+  <h2 id="imp-list-title">Imports</h2>
+  {{if .Imports}}
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th scope="col">Import</th><th scope="col">File</th><th scope="col">Status</th><th scope="col" class="num">Progress</th><th scope="col">Started</th><th scope="col">By</th></tr></thead>
+    <tbody>{{range .Imports}}<tr>
+      <td><a href="/admin/imports/{{.JobID}}">#{{.JobID}}</a></td>
+      <td>{{or .Filename "—"}} <span class="muted small">{{bytes .SizeBytes}}</span></td>
+      <td>{{badge "" .Status}}</td>
+      <td class="num">{{pct .Progress}}</td>
+      <td class="nowrap">{{fmtTime .CreatedAt}}</td>
+      <td class="small">{{.CreatedBy}}</td>
+    </tr>{{end}}</tbody>
+  </table></div>
+  {{template "pager" .Pager}}
+  {{else}}<p class="muted">No imports yet.</p>{{end}}
+</section>
+{{end}}{{end}}

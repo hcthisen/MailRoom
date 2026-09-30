@@ -1,0 +1,39 @@
+{{define "content"}}{{with .Data}}
+<div class="row filters">
+  {{if .IncludeRevoked}}<a class="btn btn-sm" href="/admin/tokens">Hide revoked tokens</a>{{else}}<a class="btn btn-sm" href="/admin/tokens?revoked=1">Show revoked tokens</a>{{end}}
+</div>
+<div class="stack">
+{{if .Items}}
+<div class="table-wrap"><table class="table">
+  <thead><tr><th scope="col">Name</th><th scope="col">Starts with</th><th scope="col">Scope</th><th scope="col">State</th><th scope="col">Last used</th><th scope="col">Expires</th><th scope="col">Created</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+  <tbody>
+    {{range .Items}}<tr>
+      <td>{{.Name}}</td>
+      <td class="mono small">{{.Prefix}}…</td>
+      <td>{{if eq (printf "%s" .Scope) "admin"}}<span class="badge badge-warn">admin</span>{{else}}<span class="badge badge-info">read</span>{{end}}</td>
+      <td>{{badge "" .State}}</td>
+      <td>{{if .LastUsedAt}}{{ago .LastUsedAt}}{{else}}<span class="muted">never</span>{{end}}</td>
+      <td>{{if .ExpiresAt}}{{fmtTime .ExpiresAt}}{{else}}<span class="muted">never</span>{{end}}</td>
+      <td>{{fmtDate .CreatedAt}} <span class="muted small mono">{{.CreatedBy}}</span></td>
+      <td class="actions">{{if eq .State "revoked"}}<span class="muted small">revoked {{fmtDate .RevokedAt}}</span>{{else}}<form method="post" action="/admin/tokens/{{.ID}}/revoke" class="inline">{{template "csrf" $}}<button class="btn btn-sm btn-danger" type="submit">Revoke…</button></form>{{end}}</td>
+    </tr>{{end}}
+  </tbody>
+</table></div>
+{{template "pager" .Pager}}
+{{else}}
+  {{template "empty" (dict "Title" "No API tokens" "Text" "Create a token below for an integration or a coding agent.")}}
+{{end}}
+
+<section class="card" aria-labelledby="new-token-title">
+  <h2 id="new-token-title">Create a token</h2>
+  {{template "form-error" .Form}}
+  <form method="post" action="/admin/tokens" class="form" novalidate>
+    {{template "csrf" $}}
+    {{template "field" (dict "Form" .Form "Name" "name" "Label" "Name" "Required" true "Autocomplete" "off" "Hint" "What uses the token, e.g. website-sync or setup-agent. Names are unique." "Placeholder" "e.g. website-sync")}}
+    {{template "select-field" (dict "Form" .Form "Name" "scope" "Label" "Scope" "Options" .Scopes "Hint" "Give read unless the integration has to change data.")}}
+    {{template "field" (dict "Form" .Form "Name" "expires_at" "Label" "Expires" "Type" "datetime-local" "Optional" true "Hint" (printf "In %s. Leave empty for a token that never expires." timezone))}}
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Create token</button></div>
+  </form>
+</section>
+</div>
+{{end}}{{end}}

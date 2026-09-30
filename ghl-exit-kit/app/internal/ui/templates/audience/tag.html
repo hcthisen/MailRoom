@@ -1,0 +1,37 @@
+{{/* A tag: rename, merge, delete. .Data is ui.audTagData. */}}
+{{define "actions"}}{{with .Data}}<a class="btn" href="/admin/contacts?tag={{.Tag.Name}}">Show contacts</a>{{end}}{{end}}
+
+{{define "content"}}{{with .Data}}
+<div class="grid grid-2">
+  <section class="card" aria-labelledby="tag-rename-title">
+    <h2 id="tag-rename-title">Rename</h2>
+    <form method="post" action="/admin/tags/{{.Tag.ID}}/rename">
+      {{template "csrf" $}}
+      {{template "form-error" .RenameForm}}
+      {{template "field" (dict "Form" .RenameForm "Name" "name" "Label" "New name" "Required" true "Hint" "Contacts, sequences and forms keep the tag; saved segments are updated to the new name.")}}
+      <button class="btn btn-primary" type="submit">Rename</button>
+    </form>
+  </section>
+
+  <section class="card" aria-labelledby="tag-merge-title">
+    <h2 id="tag-merge-title">Merge into another tag</h2>
+    <form method="post" action="/admin/tags/{{.Tag.ID}}/merge">
+      {{template "csrf" $}}
+      {{template "form-error" .MergeForm}}
+      <div class="field">
+        <label for="f-into">Tag to keep</label>
+        <input id="f-into" name="into" type="text" required list="tag-merge-list" autocomplete="off" value="{{.MergeForm.Get "into"}}"{{if .MergeForm.Err "into"}} aria-invalid="true" aria-describedby="f-into-error"{{else}} aria-describedby="f-into-hint"{{end}}>
+        {{with .MergeForm.Err "into"}}<p class="error-text" id="f-into-error">{{.}}</p>{{else}}<p class="hint" id="f-into-hint">Every contact with {{$.Data.Tag.Name}} gets this tag instead, and {{$.Data.Tag.Name}} is deleted.</p>{{end}}
+        <datalist id="tag-merge-list">{{range .Tags}}<option value="{{.}}">{{end}}</datalist>
+      </div>
+      <button class="btn" type="submit">Review merge</button>
+    </form>
+  </section>
+</div>
+
+<section class="card confirm is-danger mt-5" aria-labelledby="tag-del-title">
+  <h2 id="tag-del-title">Delete</h2>
+  <p>Removes the tag from {{plural .Tag.Contacts "contact" "contacts"}}. A tag that a sequence, form or saved segment uses can't be deleted; merge it instead.</p>
+  {{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/tags/%d/delete" .Tag.ID) "Label" "Delete tag…" "Class" "btn-danger")}}
+</section>
+{{end}}{{end}}

@@ -1,0 +1,28 @@
+{{/* A form's embed snippet and hosted page (get-form-snippet). .Data is ui.webformSnippetData. */}}
+{{define "content"}}{{with .Data}}
+{{.Tabs}}
+
+<section class="card" aria-labelledby="hosted-title">
+  <div class="card-header"><h2 id="hosted-title">Hosted page</h2><div class="actions"><button class="btn btn-sm" type="button" data-copy="#hosted-url" hidden>Copy link</button></div></div>
+  <p>Link to this page from anywhere (an email signature, social media, a button on your site). No website changes needed.</p>
+  <div class="field">
+    <label for="hosted-url">Address</label>
+    <input id="hosted-url" type="url" readonly value="{{.Snippet.HostedURL}}">
+  </div>
+  <p><a href="{{.Snippet.HostedURL}}" target="_blank" rel="noopener">Open the hosted page ↗</a></p>
+</section>
+
+<section class="card" aria-labelledby="snippet-title">
+  <div class="card-header"><h2 id="snippet-title">Embed on your website</h2><div class="actions"><button class="btn btn-sm btn-primary" type="button" data-copy="#snippet-code" hidden>Copy HTML</button></div></div>
+  <p>Paste this HTML into a page of your website. It is unstyled, so your site's CSS applies; it includes the consent text and a hidden anti-spam field (keep both).</p>
+  <div class="field">
+    <label for="snippet-code">HTML</label>
+    <textarea id="snippet-code" class="code" rows="14" readonly spellcheck="false">{{.Snippet.HTML}}</textarea>
+    <p class="hint">Submissions go to <span class="mono">{{.Snippet.Endpoint}}</span>. If your site sends the form with JavaScript instead, add its address under "Websites that submit with JavaScript" in the settings.</p>
+  </div>
+  <details>
+    <summary>Preview (without your site's styles)</summary>
+    <iframe class="preview-frame" title="Form preview" sandbox="" referrerpolicy="no-referrer" loading="lazy" srcdoc="{{.Snippet.HTML}}"></iframe>
+  </details>
+</section>
+{{end}}{{end}}

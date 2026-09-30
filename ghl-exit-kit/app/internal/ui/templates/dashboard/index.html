@@ -1,0 +1,54 @@
+{{define "content"}}{{with .Data}}
+{{if .Sending.Paused}}<div class="flash flash-warning" role="status"><p><strong>Sending is paused</strong>{{with .Sending.Reason}}: {{.}}{{end}}{{with .Sending.Since}} (since {{fmtTime .}}){{end}}. Nothing is sent until it is resumed on the <a href="/admin/health">Health</a> page.</p></div>{{end}}
+{{with .SendingErr}}<div class="flash flash-error" role="alert"><p>{{.}}</p></div>{{end}}
+
+{{if .StatsErr}}<div class="flash flash-error" role="alert"><p>{{.StatsErr}}</p></div>{{else}}{{with .Stats}}
+<section aria-labelledby="numbers-title">
+  <h2 id="numbers-title" class="visually-hidden">Numbers</h2>
+  <div class="grid stats">
+    {{template "stat" (dict "Label" "New contacts, 7 days" "Value" (num .NewContacts7d) "Sub" (printf "%s in 30 days" (num .NewContacts30d)))}}
+    {{template "stat" (dict "Label" "Active contacts" "Value" (num .ContactsActive) "Sub" (printf "of %s in total" (num .ContactsTotal)))}}
+    {{template "stat" (dict "Label" "Unsubscribes, 30 days" "Value" (num .Unsubscribes30d))}}
+    {{template "stat" (dict "Label" "Emails sent this month" "Value" (num .SentThisMonth) "Sub" (printf "since %s" (fmtDate .MonthStart)))}}
+    {{template "stat" (dict "Label" "Bounce rate, 30 days" "Value" (pct .BounceRate30d) "Sub" (printf "%s hard bounces of %s sent" (num .HardBounces30d) (num .Sent30d)) "Level" $.Data.BounceLevel)}}
+    {{template "stat" (dict "Label" "Complaint rate, 30 days" "Value" (pct .ComplaintRate30d) "Sub" (printf "%s spam reports" (num .Complaints30d)) "Level" $.Data.ComplaintLevel)}}
+  </div>
+</section>
+{{end}}{{end}}
+
+<div class="grid grid-2">
+  <section class="card" aria-labelledby="ses-title">
+    <div class="card-header"><h2 id="ses-title">Amazon SES</h2>{{with .SES}}<span class="muted small">{{if eq .Source "live"}}checked just now{{else}}checked {{ago .Account.FetchedAt}}{{end}}</span>{{end}}</div>
+    {{with .SES}}
+      <p class="small muted">Daily quota used</p>
+      {{if gt .Account.Max24HourSend 0.0}}
+        <meter class="quota" min="0" max="100" low="80" high="95" optimum="0" value="{{$.Data.QuotaPercent}}" aria-label="Daily quota used">{{$.Data.QuotaPercent}}%</meter>
+        <p>{{num .Account.SentLast24Hours}} of {{num .Account.Max24HourSend}} emails in the last 24 hours ({{pct .QuotaUsed}}), at most {{num .Account.MaxSendRate}} per second.</p>
+      {{else}}<p>No daily limit reported.</p>{{end}}
+      <dl class="props">
+        <dt>Sending</dt><dd>{{if .Account.SendingEnabled}}{{badge "" "enabled"}}{{else}}{{badge "" "disabled"}}{{end}}</dd>
+        <dt>Account</dt><dd>{{if .Account.ProductionAccessEnabled}}{{badge "" "ok"}} production access{{else}}{{badge "" "warn"}} sandbox: only verified addresses receive mail{{end}}</dd>
+        {{with .Account.EnforcementStatus}}<dt>Reputation</dt><dd>{{badge "" .}}</dd>{{end}}
+      </dl>
+    {{else}}
+      <p class="muted">{{.SESErr}}</p>
+    {{end}}
+  </section>
+
+  <section class="card" aria-labelledby="warnings-title">
+    <div class="card-header"><h2 id="warnings-title">Warnings</h2><div class="actions"><a class="btn btn-sm" href="/admin/health">Health</a></div></div>
+    {{with .Doctor}}
+      {{with $.Data.Warnings}}
+        <ul class="checks">
+          {{range .}}<li><span>{{badge "" (printf "%s" .Status)}}</span><div><span class="name">{{.Name}}</span><p class="small">{{.Message}}</p>{{with .FixHint}}<p class="fix">Fix: {{.}}</p>{{end}}</div></li>{{end}}
+        </ul>
+      {{else}}
+        <p>{{badge "" "ok"}} All checks passed.</p>
+      {{end}}
+      <p class="muted small">Checked {{ago .CheckedAt}}. The checks run every 10 minutes.</p>
+    {{else}}
+      <p class="muted">The install checks have not run yet; they run shortly after start and then every 10 minutes. Run them now on the <a href="/admin/health">Health</a> page.</p>
+    {{end}}
+  </section>
+</div>
+{{end}}{{end}}

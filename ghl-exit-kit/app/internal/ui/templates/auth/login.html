@@ -1,0 +1,12 @@
+{{define "content"}}{{with .Data}}<div class="card">
+  <h1>Sign in</h1>
+  {{template "form-error" .Form}}
+  <form method="post" action="/admin/login" class="stack" novalidate>
+    <input type="hidden" name="csrf_token" value="{{.Token}}">
+    <input type="hidden" name="next" value="{{.Next}}">
+    {{template "field" (dict "Form" .Form "Name" "email" "Label" "Email" "Type" "email" "Autocomplete" "username" "Required" true)}}
+    {{template "field" (dict "Form" .Form "Name" "password" "Label" "Password" "Type" "password" "Autocomplete" "current-password" "Required" true)}}
+    {{template "field" (dict "Form" .Form "Name" "totp_code" "Label" "Authenticator code" "Optional" true "Autocomplete" "one-time-code" "Inputmode" "numeric" "Hint" "Only if two-factor sign-in is on for your account.")}}
+    <button class="btn btn-primary" type="submit">Sign in</button>
+  </form>
+</div>{{end}}{{end}}

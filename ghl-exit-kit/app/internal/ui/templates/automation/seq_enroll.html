@@ -1,0 +1,20 @@
+{{/* Bulk enrolment by pasted addresses (enroll-sequence-contacts, dry run first). .Data is ui.enrFormData. */}}
+{{define "content"}}{{with .Data}}{{$f := .Form}}
+{{.Tabs}}
+{{with .Result}}<div class="flash flash-warning" role="status"><p><strong>Nobody would be enrolled.</strong></p>{{with $.Data.Skipped}}<ul>{{range .}}<li>{{.}}</li>{{end}}</ul>{{end}}</div>{{end}}
+{{if not .Seq.Steps}}<div class="flash flash-info" role="status"><p>This sequence has no steps yet. <a href="/admin/sequences/{{.Seq.ID}}/steps/new">Add a step</a> before enrolling anyone.</p></div>{{end}}
+<form class="form card" method="post" action="/admin/sequences/{{.Seq.ID}}/enroll" novalidate>
+  {{template "csrf" $}}
+  {{template "form-error" $f}}
+  {{template "textarea-field" (dict "Form" $f "Name" "emails" "Label" "Email addresses" "Rows" 8 "Required" true "Class" "code" "Placeholder" "alice@example.com\nbob@example.com" "Hint" "One per line, or separated by commas. Only existing, active contacts are enrolled; the re-entry policy and exit tags apply. Nothing changes until you confirm on the next page.")}}
+  <div class="row">
+    {{if .Steps}}{{template "select-field" (dict "Form" $f "Name" "at_step" "Label" "Start at" "Options" .Steps)}}{{end}}
+    {{template "field" (dict "Form" $f "Name" "start_at" "Label" "Starting from" "Type" "datetime-local" "Optional" true "Hint" (printf "The starting step is due at this time plus its delay (%s). Empty = now; may be in the past." timezone))}}
+  </div>
+  {{template "select-field" (dict "Form" $f "Name" "source" "Label" "Recorded as" "Options" .Sources "Hint" "Use migration for contacts who were part-way through this drip in another tool: start them at their next step.")}}
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">Check who would be enrolled</button>
+    <a class="btn" href="/admin/sequences/{{.Seq.ID}}">Cancel</a>
+  </div>
+</form>
+{{end}}{{end}}

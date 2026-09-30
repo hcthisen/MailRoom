@@ -1,0 +1,85 @@
+{{/* A contact: details, status, tags, sequences, timeline, GDPR export
+and erase. .Data is ui.audContactData. */}}
+{{define "actions"}}{{with .Data}}
+<a class="btn" href="/admin/contacts/{{.C.ID}}/edit">Edit</a>
+<a class="btn" href="/admin/contacts/{{.C.ID}}/export" download>Export data</a>
+{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/contacts/%d/erase" .C.ID) "Label" "Erase…" "Class" "btn-danger" "Fields" (dict "version" (printf "%d" .C.Version)))}}
+{{end}}{{end}}
+
+{{define "content"}}{{with .Data}}
+<div class="grid grid-2">
+  <section class="card" aria-labelledby="c-details-title">
+    <h2 id="c-details-title">Details</h2>
+    <dl class="props">
+      <dt>Status</dt><dd>{{badge "contact" (printf "%s" .C.Status)}} <span class="muted small">since {{fmtTime .C.StatusChangedAt}}</span>{{if .C.UnsubscribeRequestedAt}}<br><span class="muted small">Asked to unsubscribe on {{fmtTime .C.UnsubscribeRequestedAt}}: lifting the bounce or suppression makes it unsubscribed, not active.</span>{{end}}</dd>
+      <dt>Name</dt><dd>{{or .Name "—"}}</dd>
+      <dt>Created</dt><dd>{{fmtTime .C.CreatedAt}}</dd>
+      <dt>Updated</dt><dd>{{fmtTime .C.UpdatedAt}}</dd>
+      <dt>ID</dt><dd class="mono">{{.C.ID}}</dd>
+      {{range .Attrs}}<dt class="mono">{{.Key}}</dt><dd>{{.Value}}</dd>{{end}}
+    </dl>
+    {{if not .Attrs}}<p class="muted small mt-3">No attributes. <a href="/admin/contacts/{{.C.ID}}/edit">Add some</a>.</p>{{end}}
+  </section>
+
+  <section class="card" aria-labelledby="c-status-title">
+    <h2 id="c-status-title">Change status</h2>
+    <form method="post" action="/admin/contacts/{{.C.ID}}/status">
+      {{template "csrf" $}}
+      <input type="hidden" name="version" value="{{.C.Version}}">
+      {{template "form-error" .StatusForm}}
+      {{template "select-field" (dict "Form" .StatusForm "Name" "status" "Label" "New status" "Options" .Statuses)}}
+      {{template "textarea-field" (dict "Form" .StatusForm "Name" "note" "Label" "Note" "Rows" 2 "Hint" "Why. Needed to resubscribe someone, to reactivate a bounced address or to confirm a pending contact. Complained contacts can't be reactivated. Unsubscribed on a bounced, complained or suppressed contact keeps its status and records the request to unsubscribe.")}}
+      <button class="btn" type="submit">Change status</button>
+    </form>
+  </section>
+</div>
+
+<div class="grid grid-2 mt-5">
+  <section class="card" aria-labelledby="c-tags-title">
+    <h2 id="c-tags-title">Tags</h2>
+    {{if .C.Tags}}<ul class="row plain-list mb-4">
+      {{range .C.Tags}}<li class="tag row gap-1">
+        <a href="/admin/contacts?tag={{.}}">{{.}}</a>
+        <form method="post" action="/admin/contacts/{{$.Data.C.ID}}/tags/remove" class="inline">
+          {{template "csrf" $}}<input type="hidden" name="tag" value="{{.}}">
+          <button class="btn btn-sm btn-ghost" type="submit" aria-label="Remove tag {{.}}" title="Remove tag">×</button>
+        </form>
+      </li>{{end}}
+    </ul>{{else}}<p class="muted">No tags.</p>{{end}}
+    <form method="post" action="/admin/contacts/{{.C.ID}}/tags">
+      {{template "csrf" $}}
+      {{template "form-error" .TagForm}}
+      {{template "tag-input" (dict "Form" .TagForm "Name" "tags" "Label" "Add tags" "Suggestions" .Tags "Hint" "Separate tags with commas. A new tag can start a sequence or end one.")}}
+      <button class="btn" type="submit">Add</button>
+    </form>
+  </section>
+
+  <section class="card" aria-labelledby="c-enr-title">
+    <h2 id="c-enr-title">Sequences</h2>
+    {{with .Enrollments}}<div class="table-wrap"><table class="table">
+      <thead><tr><th scope="col">Sequence</th><th scope="col">Status</th><th scope="col">Next</th></tr></thead>
+      <tbody>{{range .}}<tr>
+        <td><a href="/admin/sequences/{{.SequenceID}}">{{.SequenceName}}</a></td>
+        <td>{{badge "" .Status}}{{with .ExitReason}} <span class="muted small">{{.}}</span>{{end}}</td>
+        <td class="nowrap">{{if .NextStepPosition}}step {{.NextStepPosition}}, {{ago .NextRunAt}}{{else}}{{with .FinishedAt}}ended {{fmtDate .}}{{else}}—{{end}}{{end}}</td>
+      </tr>{{end}}</tbody>
+    </table></div>{{else}}<p class="muted">Not in any sequence.</p>{{end}}
+  </section>
+</div>
+
+<section class="card mt-5" id="timeline" aria-labelledby="c-tl-title">
+  <div class="card-header"><h2 id="c-tl-title">Timeline</h2><span class="muted small">Newest first</span></div>
+  {{with .Timeline.Items}}<div class="table-wrap"><table class="table">
+    <thead><tr><th scope="col">When</th><th scope="col">What</th><th scope="col">Details</th></tr></thead>
+    <tbody>{{range .}}<tr>
+      <td class="nowrap" title="{{fmtTime .At}}">{{fmtTime .At}}</td>
+      <td><span class="tag">{{.Type}}</span></td>
+      <td>{{.Summary}}</td>
+    </tr>{{end}}</tbody>
+  </table></div>{{else}}<p class="muted">Nothing has happened yet.</p>{{end}}
+  {{if or .OlderURL .NewestURL}}<nav class="pager" aria-label="Timeline pages">
+    {{with .NewestURL}}<a class="btn btn-sm" href="{{.}}">Newest</a>{{end}}
+    {{with .OlderURL}}<a class="btn btn-sm" href="{{.}}" rel="next">Older</a>{{end}}
+  </nav>{{end}}
+</section>
+{{end}}{{end}}

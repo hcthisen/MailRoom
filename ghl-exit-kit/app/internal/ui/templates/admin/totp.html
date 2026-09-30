@@ -1,0 +1,29 @@
+{{define "content"}}{{with .Data}}
+<section class="card confirm" aria-labelledby="enrol-title">
+  <h2 id="enrol-title">1. Add Mailroom to your authenticator app</h2>
+  {{if .QR}}<p>In the app, choose to add an account and scan this QR code. Nothing changes until you confirm a code below.</p>
+  <div class="field">{{.QR}}</div>
+  <p class="small">Can't scan it? Add the account by hand with this key instead (choose "time-based" if asked).</p>
+  {{else}}<p>In the app, choose to add an account and enter the key by hand (choose "time-based" if asked). Nothing changes until you confirm a code below.</p>{{end}}
+    {{.KeyField.HTML}}
+  {{with .URI}}<details>
+    <summary class="small">Setup link (otpauth://) for apps and password managers that accept one</summary>
+        {{$.Data.URIField.HTML}}
+  </details>{{end}}
+</section>
+
+<section class="card confirm" aria-labelledby="code-title">
+  <h2 id="code-title">2. Confirm with a code</h2>
+  {{template "form-error" .Form}}
+  <form method="post" action="/admin/users/{{.User.ID}}/totp/confirm" novalidate>
+    {{template "csrf" $}}
+    <input type="hidden" name="secret" value="{{.Secret}}">
+    <input type="hidden" name="otpauth_uri" value="{{.URI}}">
+    {{template "field" (dict "Form" .Form "Name" "code" "Label" "Code from the app" "Required" true "Autocomplete" "one-time-code" "Inputmode" "numeric" "Placeholder" "123456" "Hint" "The 6-digit code the app shows now. After confirming you are signed out and sign in again with a code.")}}
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Turn on two-factor sign-in</button>
+      <a class="btn" href="/admin/users/{{.User.ID}}">Cancel</a>
+    </div>
+  </form>
+</section>
+{{end}}{{end}}

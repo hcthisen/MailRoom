@@ -1,0 +1,48 @@
+{{define "content"}}{{with .Data}}
+<div class="grid grid-2">
+  <section class="card" aria-labelledby="details-title">
+    <h2 id="details-title">Details</h2>
+    {{template "form-error" .Form}}
+    <form method="post" action="/admin/users/{{.User.ID}}" novalidate>
+      {{template "csrf" $}}
+      <input type="hidden" name="version" value="{{.Form.Get "version"}}">
+      {{template "field" (dict "Form" .Form "Name" "email" "Label" "Email" "Type" "email" "Required" true "Autocomplete" "off" "Hint" "Changing it signs the user out everywhere.")}}
+      {{template "field" (dict "Form" .Form "Name" "name" "Label" "Name" "Optional" true "Autocomplete" "off")}}
+      {{template "field" (dict "Form" .Form "Name" "password" "Label" "New password" "Type" "password" "Optional" true "Autocomplete" "new-password" "Hint" "At least 12 characters. Leave empty to keep the current one. A new password signs the user out everywhere.")}}
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Save</button></div>
+    </form>
+  </section>
+
+  <div>
+    <section class="card" aria-labelledby="totp-title">
+      <div class="card-header"><h2 id="totp-title">Two-factor sign-in</h2>{{if .User.TOTPEnabled}}{{badge "" "on"}}{{else}}{{badge "" "off"}}{{end}}</div>
+      {{if .User.TOTPEnabled}}
+        <p>Signing in needs a code from an authenticator app as well as the password.</p>
+        <form method="post" action="/admin/users/{{.User.ID}}/totp/reset" class="inline">{{template "csrf" $}}<button class="btn btn-danger btn-sm" type="submit">Turn off…</button></form>
+        <p class="muted small">Turn it off if the phone with the app is lost; it can be set up again afterwards.</p>
+      {{else if .Self}}
+        <p>Protect your account with a code from an authenticator app (such as 1Password, Bitwarden, Google Authenticator or Microsoft Authenticator) on top of your password.</p>
+        <form method="post" action="/admin/users/{{.User.ID}}/totp" class="inline">{{template "csrf" $}}<button class="btn btn-primary" type="submit">Set up two-factor sign-in</button></form>
+      {{else}}
+        <p class="muted">Off. Only {{.User.Email}} can set it up, after signing in, on their own user page.</p>
+      {{end}}
+    </section>
+
+    <section class="card" aria-labelledby="info-title">
+      <h2 id="info-title">Activity</h2>
+      <dl class="props">
+        <dt>Last signed in</dt><dd>{{if .User.LastLoginAt}}{{fmtTime .User.LastLoginAt}}{{else}}never{{end}}</dd>
+        <dt>Added</dt><dd>{{fmtTime .User.CreatedAt}}</dd>
+        <dt>Changed</dt><dd>{{fmtTime .User.UpdatedAt}}</dd>
+      </dl>
+      <p><a href="/admin/health/audit?actor={{.User.Email}}">What this user changed</a> · <a href="/admin/health/audit?target_type=user&amp;target_id={{.User.ID}}">Changes to this user</a></p>
+    </section>
+
+    <section class="card" aria-labelledby="danger-title">
+      <h2 id="danger-title">Delete</h2>
+      <p class="muted small">The user can no longer sign in. The last user can't be deleted.</p>
+      <form method="post" action="/admin/users/{{.User.ID}}/delete" class="inline">{{template "csrf" $}}<button class="btn btn-danger btn-sm" type="submit">Delete user…</button></form>
+    </section>
+  </div>
+</div>
+{{end}}{{end}}

@@ -1,0 +1,78 @@
+{{/* The page layout (signed in) and the bare layout (sign-in, logged-out
+errors). Both get a View. Pages define "content" and optionally
+"actions" (buttons in the page header). */}}
+
+{{define "head"}}<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="same-origin">
+<meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false,"selfRequestsOnly":true,"historyCacheSize":0}'>
+<title>{{if .Title}}{{.Title}} · {{end}}Mailroom</title>
+<link rel="stylesheet" href="{{static "app.css"}}">
+<script src="{{static "htmx.min.js"}}" defer></script>
+<script src="{{static "app.js"}}" defer></script>{{end}}
+
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+{{template "head" .}}
+</head>
+<body hx-headers="{{.CSRFHeaders}}">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="app">
+  <header class="topbar">
+    <a class="brand" href="/admin/">Mailroom</a>
+    {{with .Company}}<span class="company" title="{{.}}">{{.}}</span>{{end}}
+    <div class="usermenu">
+      {{with .Session}}<span class="who" title="Signed in as {{.Email}}">{{.Email}}</span>{{end}}
+      <form method="post" action="/admin/logout">{{template "csrf" .}}<button class="btn btn-sm" type="submit">Sign out</button></form>
+    </div>
+  </header>
+  <nav class="sidenav" aria-label="Main">
+    <ul>
+      {{range navItems}}<li><a href="{{.URL}}"{{if eq .Key $.Nav}} aria-current="page"{{end}}>{{.Label}}</a></li>
+      {{end}}
+    </ul>
+  </nav>
+  <main class="main" id="main" tabindex="-1">
+    {{template "page-header" .}}
+    {{template "flashes" .}}
+    {{template "content" .}}
+  </main>
+  <footer class="footer">Mailroom {{.Version}}</footer>
+</div>
+</body>
+</html>{{end}}
+
+{{define "bare"}}<!doctype html>
+<html lang="en">
+<head>
+{{template "head" .}}
+</head>
+<body>
+<main class="bare" id="main">
+  <div class="auth-card">
+    <a class="brand" href="/admin/">Mailroom</a>
+    {{template "flashes" .}}
+    {{template "content" .}}
+    <p class="muted small right">Mailroom {{.Version}}</p>
+  </div>
+</main>
+</body>
+</html>{{end}}
+
+{{define "page-header"}}{{if .Title}}<div class="page-header">
+  <div>
+    {{with .Crumbs}}<nav class="breadcrumb" aria-label="Breadcrumb">{{range $i, $c := .}}{{if $i}} / {{end}}<a href="{{$c.URL}}">{{$c.Label}}</a>{{end}}</nav>{{end}}
+    <h1>{{.Title}}</h1>
+    {{with .Subtitle}}<p class="subtitle">{{.}}</p>{{end}}
+  </div>
+  <div class="actions">{{block "actions" .}}{{end}}</div>
+</div>{{end}}{{end}}
+
+{{define "flashes"}}<div class="flashes" id="flashes" aria-live="polite">{{range .Flashes}}{{template "flash" .}}{{end}}</div>{{end}}
+
+{{define "flash"}}<div class="flash flash-{{.Kind}}" role="{{if eq .Kind "error"}}alert{{else}}status{{end}}"><p>{{.Text}}</p><button type="button" class="dismiss" aria-label="Dismiss">×</button></div>{{end}}
+
+{{define "flash-oob"}}<div hx-swap-oob="beforeend:#flashes">{{range .Flashes}}{{template "flash" .}}{{end}}</div>{{end}}
+
+{{define "csrf"}}<input type="hidden" name="csrf_token" value="{{.CSRF}}">{{end}}

@@ -1,0 +1,46 @@
+{{/* Form components. Each takes a dict; "Form" is a *ui.Form (values and
+errors), "Name" the field name (the service's field name, so its
+validation errors land here), "Label" the visible label. Optional keys:
+Hint, Required, Optional (adds "(optional)"), Placeholder, Autocomplete,
+Type (field only). */}}
+
+{{define "field"}}<div class="field">
+  <label for="f-{{.Name}}">{{.Label}}{{if .Optional}} <span class="optional">(optional)</span>{{end}}</label>
+  <input id="f-{{.Name}}" name="{{.Name}}" type="{{or .Type "text"}}"{{if ne (or .Type "") "password"}} value="{{.Form.Get .Name}}"{{end}}{{if .Required}} required{{end}}{{with .Placeholder}} placeholder="{{.}}"{{end}}{{with .Autocomplete}} autocomplete="{{.}}"{{end}}{{with .Inputmode}} inputmode="{{.}}"{{end}}{{if .Form.Err .Name}} aria-invalid="true" aria-describedby="f-{{.Name}}-error"{{else if .Hint}} aria-describedby="f-{{.Name}}-hint"{{end}}>
+  {{template "field-help" .}}
+</div>{{end}}
+
+{{define "textarea-field"}}<div class="field">
+  <label for="f-{{.Name}}">{{.Label}}{{if .Optional}} <span class="optional">(optional)</span>{{end}}</label>
+  <textarea id="f-{{.Name}}" name="{{.Name}}"{{with .Class}} class="{{.}}"{{end}}{{with .Rows}} rows="{{.}}"{{end}}{{if .Required}} required{{end}}{{with .Placeholder}} placeholder="{{.}}"{{end}}{{if .Form.Err .Name}} aria-invalid="true" aria-describedby="f-{{.Name}}-error"{{else if .Hint}} aria-describedby="f-{{.Name}}-hint"{{end}}>{{.Form.Raw .Name}}</textarea>
+  {{template "field-help" .}}
+</div>{{end}}
+
+{{/* select-field: "Options" is a []ui.Option. */}}
+{{define "select-field"}}<div class="field">
+  <label for="f-{{.Name}}">{{.Label}}{{if .Optional}} <span class="optional">(optional)</span>{{end}}</label>
+  <select id="f-{{.Name}}" name="{{.Name}}"{{if .Required}} required{{end}}{{if .Form.Err .Name}} aria-invalid="true" aria-describedby="f-{{.Name}}-error"{{else if .Hint}} aria-describedby="f-{{.Name}}-hint"{{end}}>
+    {{$v := .Form.Get .Name}}{{range .Options}}<option value="{{.Value}}"{{if eq .Value $v}} selected{{end}}>{{.Label}}</option>{{end}}
+  </select>
+  {{template "field-help" .}}
+</div>{{end}}
+
+{{/* checkbox-field: checked when the form value is set (Form.Checked). */}}
+{{define "checkbox-field"}}<div class="field">
+  <label class="check"><input type="checkbox" id="f-{{.Name}}" name="{{.Name}}" value="1"{{if .Form.Checked .Name}} checked{{end}}{{if .Form.Err .Name}} aria-invalid="true" aria-describedby="f-{{.Name}}-error"{{else if .Hint}} aria-describedby="f-{{.Name}}-hint"{{end}}> {{.Label}}</label>
+  {{template "field-help" .}}
+</div>{{end}}
+
+{{/* tag-input: comma-separated tag names (ui.ParseTags reads them back).
+"Suggestions" ([]string, optional) fills a datalist of existing tags. */}}
+{{define "tag-input"}}<div class="field">
+  <label for="f-{{.Name}}">{{or .Label "Tags"}}{{if .Optional}} <span class="optional">(optional)</span>{{end}}</label>
+  <input id="f-{{.Name}}" name="{{.Name}}" type="text" autocomplete="off" value="{{.Form.Get .Name}}"{{with .Suggestions}} list="f-{{$.Name}}-list"{{end}}{{with .Placeholder}} placeholder="{{.}}"{{else}} placeholder="e.g. customer, newsletter"{{end}}{{if .Form.Err .Name}} aria-invalid="true" aria-describedby="f-{{.Name}}-error"{{else}} aria-describedby="f-{{.Name}}-hint"{{end}}>
+  {{with .Suggestions}}<datalist id="f-{{$.Name}}-list">{{range .}}<option value="{{.}}">{{end}}</datalist>{{end}}
+  {{if .Form.Err .Name}}<p class="error-text" id="f-{{.Name}}-error">{{.Form.Err .Name}}</p>{{else}}<p class="hint" id="f-{{.Name}}-hint">{{or .Hint "Separate tags with commas."}}</p>{{end}}
+</div>{{end}}
+
+{{define "field-help"}}{{if .Form.Err .Name}}<p class="error-text" id="f-{{.Name}}-error">{{.Form.Err .Name}}</p>{{else if .Hint}}<p class="hint" id="f-{{.Name}}-hint">{{.Hint}}</p>{{end}}{{end}}
+
+{{/* form-error: the form's non-field message (conflicts, refusals). Pass the *ui.Form. */}}
+{{define "form-error"}}{{with .}}{{with .Message}}<div class="form-error" role="alert">{{.}}</div>{{end}}{{end}}{{end}}

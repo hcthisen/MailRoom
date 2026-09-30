@@ -1,0 +1,73 @@
+{{define "content"}}{{with .Data}}
+{{.Tabs.HTML}}
+<form method="post" action="/admin/settings" class="form" novalidate>
+  {{template "csrf" $}}
+  <input type="hidden" name="version" value="{{.Form.Get "version"}}">
+  {{template "form-error" .Form}}
+
+  <section class="card" aria-labelledby="sender-title">
+    <h2 id="sender-title">Sender</h2>
+    <div class="field">
+      <span class="label">Sending domain</span>
+      <p><span class="mono">{{.Domain}}</span> <span class="muted small">Set at provisioning and read-only here: changing it means provisioning SES again.</span></p>
+    </div>
+    {{template "field" (dict "Form" .Form "Name" "sender.from_name" "Label" "From name" "Hint" "The name recipients see, e.g. your company or newsletter name." "Autocomplete" "organization")}}
+    {{template "field" (dict "Form" .Form "Name" "sender.from_email" "Label" "From address" "Type" "email" "Required" true "Hint" (printf "Must be an address on %s." .Domain) "Placeholder" (printf "news@%s" .Domain))}}
+    {{template "field" (dict "Form" .Form "Name" "sender.reply_to" "Label" "Reply-to address" "Type" "email" "Optional" true "Hint" (printf "Where replies go. Must be on %s; leave empty for none." .Domain))}}
+  </section>
+
+  <section class="card" aria-labelledby="company-title">
+    <h2 id="company-title">Company and notifications</h2>
+    {{template "textarea-field" (dict "Form" .Form "Name" "company_footer" "Label" "Company footer" "Rows" 3 "Hint" "Shown at the bottom of every marketing email: company name, postal address, registration number.")}}
+    <p class="small mb-4">The logo, brand colour and layout of every email are set in the <a href="/admin/layout">base layout</a> (Content, Base layout).</p>
+    {{template "field" (dict "Form" .Form "Name" "owner_email" "Label" "Owner email" "Type" "email" "Autocomplete" "email" "Hint" "Receives test sends and, unless an alert address is set, alerts.")}}
+    {{template "field" (dict "Form" .Form "Name" "alert_email" "Label" "Alert email" "Type" "email" "Optional" true "Hint" "Where alerts go (circuit breaker, SES paused, backup failed). Empty means the owner email.")}}
+    <div class="field">
+      <label for="f-timezone">Time zone</label>
+      <input id="f-timezone" name="timezone" type="text" required list="f-timezone-list" autocomplete="off" value="{{.Form.Get "timezone"}}"{{if .Form.Err "timezone"}} aria-invalid="true" aria-describedby="f-timezone-error"{{else}} aria-describedby="f-timezone-hint"{{end}}>
+      <datalist id="f-timezone-list">{{range .Timezones}}<option value="{{.}}">{{end}}</datalist>
+      {{with .Form.Err "timezone"}}<p class="error-text" id="f-timezone-error">{{.}}</p>{{else}}<p class="hint" id="f-timezone-hint">An IANA time zone such as Europe/London. Used for send windows, schedules and every time shown here.</p>{{end}}
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="tracking-title">
+    <h2 id="tracking-title">Tracking</h2>
+    {{template "checkbox-field" (dict "Form" .Form "Name" "tracking.clicks" "Label" "Track clicks per contact" "Hint" "Links are rewritten so each click is recorded with the contact; needed for \"clicked link\" segments.")}}
+    {{template "checkbox-field" (dict "Form" .Form "Name" "tracking.opens" "Label" "Track opens" "Hint" "Adds a tracking pixel. Unreliable since Apple Mail privacy protection, so off by default.")}}
+  </section>
+
+  <section class="card" aria-labelledby="rate-title">
+    <h2 id="rate-title">Send rate</h2>
+    {{template "field" (dict "Form" .Form "Name" "sending.rate_override_per_sec" "Label" "Fixed rate (emails per second)" "Inputmode" "decimal" "Hint" "0 means automatic: a share of the SES maximum rate (below). At most 1000.")}}
+    {{template "field" (dict "Form" .Form "Name" "sending.rate_fraction" "Label" "Share of the SES maximum rate" "Inputmode" "decimal" "Hint" "Used when the fixed rate is 0. A fraction above 0 and at most 1: 0.8 uses 80 % of the SES rate.")}}
+  </section>
+
+  <section class="card" aria-labelledby="breaker-title">
+    <h2 id="breaker-title">Circuit breaker</h2>
+    <p class="muted small">A broadcast pauses by itself when its bounce or complaint rate gets too high, and the owner is alerted.</p>
+    {{template "field" (dict "Form" .Form "Name" "circuit_breaker.min_messages" "Label" "Check after this many emails" "Inputmode" "numeric" "Hint" "The rates are only checked once a broadcast has sent this many emails (1 to 1,000,000).")}}
+    {{template "field" (dict "Form" .Form "Name" "circuit_breaker.hard_bounce_rate" "Label" "Hard-bounce rate limit" "Inputmode" "decimal" "Hint" "A fraction: 0.05 pauses above 5 % hard bounces.")}}
+    {{template "field" (dict "Form" .Form "Name" "circuit_breaker.complaint_rate" "Label" "Complaint rate limit" "Inputmode" "decimal" "Hint" "A fraction: 0.001 pauses above 0.1 % spam complaints.")}}
+  </section>
+
+  <section class="card" aria-labelledby="window-title">
+    <h2 id="window-title">Default send window</h2>
+    <p class="muted small">Sequence emails are only sent inside this window (in the time zone above), unless a sequence has its own window. Broadcasts are not affected.</p>
+    {{template "checkbox-field" (dict "Form" .Form "Name" "default_send_window.enabled" "Label" "Only send sequence emails inside a window")}}
+    <fieldset class="field choices"{{if .Form.Err "default_send_window.days"}} aria-describedby="f-days-error"{{end}}>
+      <legend>Days</legend>
+      {{range .Weekdays}}<label class="check"><input type="checkbox" name="default_send_window.days" value="{{.Value}}"{{if $.Data.Form.Has "default_send_window.days" .Value}} checked{{end}}> {{.Label}}</label>{{end}}
+      {{with .Form.Err "default_send_window.days"}}<p class="error-text" id="f-days-error">{{.}}</p>{{end}}
+    </fieldset>
+    <div class="row">
+      {{template "field" (dict "Form" .Form "Name" "default_send_window.start" "Label" "From" "Type" "time")}}
+      {{template "field" (dict "Form" .Form "Name" "default_send_window.end" "Label" "Until" "Type" "time")}}
+    </div>
+  </section>
+
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">Save settings</button>
+    <a class="btn btn-ghost" href="/admin/settings">Discard changes</a>
+  </div>
+</form>
+{{end}}{{end}}

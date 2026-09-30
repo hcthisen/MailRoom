@@ -1,0 +1,19 @@
+{{/* A sequence as YAML with its body files (export-sequence). .Data is ui.yamlExportData. */}}
+{{define "actions"}}<a class="btn btn-primary" href="/admin/sequences/{{.Data.Seq.ID}}/export.zip" download>Download .zip</a>{{end}}
+
+{{define "content"}}{{with .Data}}
+{{.Tabs}}
+<p>The sequence in the format of <span class="mono">docs/sequence-format.md</span>. The .zip holds the YAML file and one file per email body; import them again (under another name) to copy the sequence, or keep them under version control.</p>
+<section class="card" aria-labelledby="yaml-title">
+  <h2 id="yaml-title" class="mono">{{.Slug}}.yaml</h2>
+  <pre>{{.YAML}}</pre>
+</section>
+{{range .Files}}
+<section class="card">
+  <details>
+    <summary class="mono">{{.Name}} <span class="muted small">({{bytes (len .Body)}})</span></summary>
+    <pre>{{.Body}}</pre>
+  </details>
+</section>
+{{end}}
+{{end}}{{end}}
