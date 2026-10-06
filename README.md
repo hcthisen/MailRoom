@@ -6,7 +6,7 @@ This kit gives you the cheapest way to move on, with a self-hosted setup that yo
 
 | Part | What it does | Price (approx.) |
 |---|---|---|
-| **Mailroom** on a small VPS | One app for contacts, tags, sign-up forms, drip sequences, newsletters, unsubscribes and statistics. Everything in it can also be controlled through its API | VPS approx. €5–7/month incl. backups |
+| **Mailroom** on a small VPS (or your Coolify server) | One app for contacts, tags, sign-up forms, drip sequences, newsletters, unsubscribes and statistics. Everything in it can also be controlled through its API | VPS approx. €5–7/month incl. backups |
 | **Amazon SES** | The actual delivery to Gmail, Outlook etc. | approx. $0.10 per 1,000 emails |
 
 Mailroom is open source (MIT licence) and included in this kit as source code. It sends from **one domain**: yours.
@@ -18,6 +18,18 @@ New Amazon SES accounts start in a test mode (the "sandbox") that can only send 
 ## Start here
 
 ➡️ **Follow the step-by-step guide: [guide/steps.md](guide/steps.md)**
+
+Start your coding agent (Claude Code or Codex) **in this folder**. It reads its instructions from [AGENTS.md](AGENTS.md); Claude Code finds them through [CLAUDE.md](CLAUDE.md).
+
+## Two ways to run Mailroom
+
+| | Own server (default) | Coolify |
+|---|---|---|
+| For | A new Hetzner server the agent creates through the Hetzner API (or a server you already have) | A server that already runs [Coolify](https://coolify.io), possibly with other services |
+| HTTPS | Mailroom gets its own certificate (ports 80/443) | Coolify's proxy handles HTTPS; Mailroom publishes no ports, so nothing clashes |
+| How | [deploy/README.md](deploy/README.md), done by the agent | Deploy this repository with the root [docker-compose.yaml](docker-compose.yaml): [deploy/coolify.md](deploy/coolify.md), by the agent through Coolify's API or by hand in Coolify |
+
+Choose with `DEPLOY_TARGET` in `.env`.
 
 ## Timeline
 
@@ -37,7 +49,9 @@ New Amazon SES accounts start in a test mode (the "sandbox") that can only send 
 | `ghl-export/` | You: your exported GoHighLevel data and workflow notes |
 | [AGENTS.md](AGENTS.md) | The coding agent: the technical runbook (`CLAUDE.md` points Claude Code to it) |
 | [app/](app/) | Mailroom's source code and documentation ([PRD](app/PRD.md), [API spec](app/api/openapi.yaml), [import and sequence formats](app/docs/)) |
-| [deploy/](deploy/) | How Mailroom runs on the server: the Docker Compose file and its [README](deploy/README.md) (install, backups, upgrades) |
+| [deploy/](deploy/) | How Mailroom runs on its own server: the Docker Compose file and its [README](deploy/README.md) (install, backups, upgrades), and [coolify.md](deploy/coolify.md) for Coolify |
+| [docker-compose.yaml](docker-compose.yaml) | The Coolify deployment (Build Pack "Docker Compose") |
+| [notes/](notes/) | The original planning conversation |
 | [LICENSE](LICENSE) | MIT licence for the whole kit |
 
 ## Responsibility

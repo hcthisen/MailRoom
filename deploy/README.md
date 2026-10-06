@@ -1,5 +1,7 @@
 # Deploying Mailroom
 
+> On a server that runs **Coolify**, don't use this file: deploy the repository's root `docker-compose.yaml` as described in [coolify.md](coolify.md). Coolify then handles HTTPS and no host ports are used.
+
 Mailroom runs as one container, built on the server from the source in the
 kit's `app/` directory. The compose file in this directory,
 [`docker-compose.yml`](docker-compose.yml), starts it. The runbook in

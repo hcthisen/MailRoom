@@ -11,13 +11,13 @@ The client does **Parts 0–5** (about 1–2 hours, plus waiting time for accoun
 
 ## Part 0: Get ready
 
-**0.1 Download the kit.** Download the `ghl-exit-kit` folder and put it somewhere you can find it, e.g. your Documents folder.
+**0.1 Download the kit.** Download (or clone) the `crm-marketing` repository and put the folder somewhere you can find it, e.g. your Documents folder.
 📸 `00-01-kit-folder.png`: the unzipped folder open in Finder/Explorer. Highlight `.env.example`.
 
 **0.2 Install VS Code.** Download it for free from <https://code.visualstudio.com> and install it. You'll use it to edit the settings file.
 > On a Mac, Finder hides files that start with a dot, like `.env`. VS Code shows them, so always open the folder in VS Code.
 
-**0.3 Open the kit in VS Code.** Choose **File → Open Folder** and select `ghl-exit-kit`.
+**0.3 Open the kit in VS Code.** Choose **File → Open Folder** and select `crm-marketing`. Always start the coding agent in this folder: it reads its instructions from `AGENTS.md` (Claude Code via `CLAUDE.md`) there.
 📸 `00-03-vscode-open-folder.png`: VS Code with the folder open and the file list visible.
 
 **0.4 Create your settings file.** In the file list, right-click `.env.example`, choose **Copy**, then **Paste**, and rename the copy to `.env`. Keep `.env` open. You'll fill it in as you go.
@@ -175,6 +175,8 @@ _The operator does the email, password, card and phone steps. No screenshots of 
 ---
 
 ## Part 3: Hetzner, the server that runs your system
+
+> **Already have a Coolify server?** Skip 3.1–3.3. Set `DEPLOY_TARGET=coolify` in `.env`. Either create an API token in Coolify (**Keys & Tokens → API tokens**, with write access) and put `COOLIFY_URL` and `COOLIFY_API_TOKEN` in `.env`, so the agent deploys for you, or leave them empty and follow [deploy/coolify.md](../deploy/coolify.md) yourself when the agent asks. Coolify must be able to read your copy of this repository (**Sources → GitHub App**). Coolify then handles HTTPS, and Mailroom shares the server with your other services.
 
 > You don't create the server yourself. The agent creates it with the right size and settings using the key from step 3.3.
 

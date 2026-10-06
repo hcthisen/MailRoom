@@ -6,7 +6,11 @@ You are the coding agent for a customer who is leaving GoHighLevel (GHL). The cu
 - the API spec: [app/api/openapi.yaml](app/api/openapi.yaml) (a snapshot; the running server serves the same spec at `/api/v1/openapi.json`),
 - the API guide at `/api/v1/docs` on the running server (no token needed),
 - the file formats: [app/docs/import-format.md](app/docs/import-format.md) (contacts CSV) and [app/docs/sequence-format.md](app/docs/sequence-format.md) (sequence YAML),
-- how to run it on the server: [deploy/README.md](deploy/README.md).
+- how to run it on the server: [deploy/README.md](deploy/README.md) (plain VPS) or [deploy/coolify.md](deploy/coolify.md) (Coolify).
+
+**Two ways to deploy** (`DEPLOY_TARGET` in `.env`):
+- `vps` (default): a server of its own, created through the Hetzner API (`HCLOUD_TOKEN`) or given as `VPS_HOST`. Mailroom gets its own HTTPS certificate on ports 80/443. Phases 2–5 below.
+- `coolify`: an existing Coolify server deploys this repository with the root [docker-compose.yaml](docker-compose.yaml). Coolify's proxy handles HTTPS, and Mailroom publishes no host ports, so it can share the server with other services. Follow [deploy/coolify.md](deploy/coolify.md) for phases 2–5 (by Coolify's API with `COOLIFY_URL` + `COOLIFY_API_TOKEN`, or by the customer in Coolify's UI). Phase 0, 1 and 6–11 are the same.
 
 Target architecture:
 
@@ -51,11 +55,12 @@ Website form ─► Mailroom (one container, SQLite, HTTPS) ─► Amazon SES �
   - `curl`, and `jq` if you want it for the API recipes (optional).
 
   If a CLI can't be installed, call the same services' HTTP APIs with `curl` instead.
-- Read `.env`, and check that the required fields are filled in. Either `HCLOUD_TOKEN` or `VPS_HOST` must be set, and with `DNS_MODE=cloudflare`, `CLOUDFLARE_API_TOKEN` must be set.
+- Read `.env`, and check that the required fields are filled in. With `DEPLOY_TARGET=vps` (or empty), either `HCLOUD_TOKEN` or `VPS_HOST` must be set. With `DEPLOY_TARGET=coolify`, either `COOLIFY_URL` + `COOLIFY_API_TOKEN` are set (you deploy through Coolify's API) or the customer will click through Coolify themselves (deploy/coolify.md §4 "By hand"); you also need Go 1.26+ on this machine for the SES and DNS commands (deploy/coolify.md §1). With `DNS_MODE=cloudflare`, `CLOUDFLARE_API_TOKEN` must be set.
 - Validate each key with one read-only call:
   - GHL: fetch the location (`GET /locations/{GHL_LOCATION_ID}`).
   - AWS (setup keys, `AWS_REGION`): `aws sts get-caller-identity` and `aws sesv2 get-account`. Note whether `ProductionAccessEnabled` is false (sandbox).
-  - Hetzner: list servers (`hcloud server list`).
+  - Hetzner (vps): list servers (`hcloud server list`).
+  - Coolify: `GET $COOLIFY_URL/api/v1/version` and `GET $COOLIFY_URL/api/v1/servers` with `Authorization: Bearer $COOLIFY_API_TOKEN`; note the server's public IP and that its proxy is running. Check that Coolify can read this repository (a GitHub App or deploy key, deploy/coolify.md §1).
   - Cloudflare: verify the token (`GET /client/v4/user/tokens/verify`) and find the zone for `DOMAIN` (`GET /client/v4/zones?name=DOMAIN`).
 - With `DNS_MODE=manual`: look up the nameservers for `DOMAIN`, and tell the customer which provider hosts their DNS.
 - Check that `APP_SUBDOMAIN.DOMAIN` and `MAIL_FROM_SUBDOMAIN.DOMAIN` (defaults `newsletter` and `bounce`) don't already exist in DNS. If one does, ask for another name. Also note whether `_dmarc.DOMAIN` has a TXT record (phase 4).
@@ -87,6 +92,8 @@ This step has nothing to do with Mailroom. It only produces files. Use GHL API v
 ⛔ **CHECKPOINT 1:** Show the report. Ask the customer to confirm the numbers and the flow summary and to answer any open questions.
 
 ## Phase 2: Server
+
+> **`DEPLOY_TARGET=coolify`:** skip phases 2–5 as written here and follow [deploy/coolify.md](deploy/coolify.md) steps 2–6 instead. The checkpoints still apply: ⛔ 2 before sending the production-access request, ⛔ 3 before any DNS change. The admin and the API token come from `MAILROOM_ADMIN_EMAIL`/`MAILROOM_ADMIN_PASSWORD`/`MAILROOM_BOOTSTRAP_TOKEN` (the token is in `secrets/api-token.txt`, the password in `secrets/admin-password.txt`). Then continue at phase 6.
 
 - **Hetzner** (`hcloud` CLI with `HCLOUD_TOKEN`):
   - Create an SSH key in `secrets/` and upload the public part.
@@ -237,12 +244,13 @@ Nothing in this phase may email a real contact (ground rule 4): real contacts ar
    - what to do if Mailroom or AWS sends a warning,
    - how to rebuild or upgrade (`sudo docker compose build && sudo docker compose up -d`; after changing `.env`, `sudo docker compose up -d`, since a restart keeps the old settings),
    - the monthly cost.
-2. Don't print the admin password (ground rule 1: the chat is kept in the session transcript). Tell the customer to open `secrets/admin.txt` in VS Code, copy the password into their password manager with the address `https://APP_SUBDOMAIN.DOMAIN/`, and then delete the file.
+2. Don't print the admin password (ground rule 1: the chat is kept in the session transcript). Tell the customer to open `secrets/admin.txt` (Coolify: `secrets/admin-password.txt`, and remove `MAILROOM_ADMIN_PASSWORD` from Coolify's variables) in VS Code, copy the password into their password manager with the address `https://APP_SUBDOMAIN.DOMAIN/`, and then delete the file.
 3. API token: ask whether they want to keep the `setup-agent` token for future agent work. If not, find its ID with `GET /api/v1/tokens` and revoke it with `DELETE /api/v1/tokens/{id}` as your last API call.
 4. Setup keys: the customer turns them off (guide step 7.3). The keys can't do this themselves. Remind them of each one:
    - deactivate, then delete, the access key of the IAM user `setup-agent` (for later setup work, create a new key rather than switching an old one on again),
    - delete the Cloudflare token,
    - delete the Hetzner token. The server keeps running.
+   - Coolify: delete the API token you used (`COOLIFY_API_TOKEN`), unless they want to keep it.
    - The GHL token dies with the account.
 5. List the GHL-related DNS records (e.g. LeadConnector/Mailgun DKIM, tracking CNAMEs, GHL entries in SPF) that can be deleted **after** `GHL_SHUTDOWN_DATE`. Don't delete them yourself.
 6. Update `PROGRESS.md` to "done", and give a short summary.

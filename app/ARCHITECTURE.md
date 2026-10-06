@@ -289,6 +289,7 @@ Environment variables are loaded once at start (`config.LoadFrom`). Every valida
 | `MAILROOM_SECRET` | HMAC key, at least 32 characters. If it is empty, a key is generated once and stored in `<data>/secret.key` (0600) | |
 | `HTTP_ONLY`, `HTTP_ADDR` | `HTTP_ONLY=1` (or `serve --http-only`) serves plain HTTP on `HTTP_ADDR` (default `:8080`) | |
 | `TRUSTED_PROXIES` | comma-separated IPs/CIDRs of reverse proxies whose `X-Forwarded-For` is believed (e.g. `172.16.0.0/12`). Default none: the connection address is the client. `HTTP_ONLY` alone never trusts the header | |
+| `MAILROOM_ADMIN_EMAIL`, `MAILROOM_ADMIN_PASSWORD`, `MAILROOM_BOOTSTRAP_TOKEN` | optional first-start bootstrap for platforms without a shell (Coolify): `serve` creates the first admin while no user exists, and an admin API token named `bootstrap` (the given `mr_…` secret, stored hashed) while no token of that name exists. Remove them after the setup | |
 | `MAILROOM_LOG_LEVEL` | `debug`, `info` (default), `warn` or `error` | |
 
 Read only by the CLI: `CLOUDFLARE_API_TOKEN` (`provision dns --cloudflare`), and the setup user's `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN` for `provision ses`, passed to that one run. `mailroom healthcheck` reads only `HTTP_ONLY` and `HTTP_ADDR`. The compose file uses `MAILROOM_VERSION` (build arg) and `MAILROOM_UID`/`MAILROOM_GID`.

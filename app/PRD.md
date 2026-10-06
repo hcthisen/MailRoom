@@ -389,7 +389,7 @@ listmonk is AGPL-3.0 and Mailroom is MIT, so **no listmonk code may be copied**.
 **Folder layout**
 
 ```text
-ghl-exit-kit/
+crm-marketing/          (the repository root; start the coding agent here)
   LICENSE            MIT, covers the whole kit
   README.md, AGENTS.md, CLAUDE.md, .env.example
   guide/             client step-by-step + screenshots

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"mailroom/internal/app"
+	"mailroom/internal/auth"
 	"mailroom/internal/config"
 )
 
@@ -43,9 +44,39 @@ func runServe(ctx context.Context, env *Env, args []string) error {
 		return err
 	}
 	defer a.Close()
+	if err := bootstrapFromEnv(ctx, a, env.Getenv, log); err != nil {
+		return err
+	}
 	if err := a.Run(ctx); err != nil {
 		return err
 	}
 	log.Info("mailroom stopped")
+	return nil
+}
+
+// bootstrapFromEnv creates the first admin and an admin API token from
+// MAILROOM_ADMIN_EMAIL, MAILROOM_ADMIN_PASSWORD and
+// MAILROOM_BOOTSTRAP_TOKEN, for platforms where no one can run "admin
+// create" or "token create" in the container (Coolify). Both are created
+// only once; the values are never logged.
+func bootstrapFromEnv(ctx context.Context, a *app.App, getenv func(string) string, log *slog.Logger) error {
+	in := auth.EnvBootstrap{
+		AdminEmail:    getenv("MAILROOM_ADMIN_EMAIL"),
+		AdminPassword: getenv("MAILROOM_ADMIN_PASSWORD"),
+		Token:         getenv("MAILROOM_BOOTSTRAP_TOKEN"),
+	}
+	if in == (auth.EnvBootstrap{}) {
+		return nil
+	}
+	res, err := a.Auth.BootstrapFromEnv(ctx, in)
+	if err != nil {
+		return err
+	}
+	if res.AdminCreated {
+		log.Info("admin user created from MAILROOM_ADMIN_EMAIL")
+	}
+	if res.TokenCreated {
+		log.Info("API token \"bootstrap\" created from MAILROOM_BOOTSTRAP_TOKEN")
+	}
 	return nil
 }

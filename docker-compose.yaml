@@ -1,0 +1,81 @@
+# Mailroom on Coolify (Build Pack: "Docker Compose", file /docker-compose.yaml).
+# Full instructions: deploy/coolify.md.
+#
+# Differences from the plain-VPS file (deploy/docker-compose.yml):
+# - Coolify's proxy (Traefik or Caddy) terminates HTTPS and gets the
+#   certificate. Mailroom's own Let's Encrypt support is switched off
+#   (HTTP_ONLY=1) and it serves plain HTTP on port 8080 inside Docker only.
+# - No host ports are published, so nothing clashes with other services on
+#   the server. In Coolify, set the service's domain WITH the container port:
+#       https://newsletter.example.com:8080
+#   Coolify then routes https://newsletter.example.com (port 443) to
+#   port 8080 of this container.
+# - All settings come from Coolify's environment variables (required ones
+#   are marked with ":?" so Coolify shows them as required).
+# - Data lives in the named volume "mailroom-data" (database, media,
+#   backups, the HMAC key). Back it up with the server or use BACKUP_BUCKET.
+
+services:
+  mailroom:
+    build:
+      context: ./app
+      args:
+        VERSION: ${MAILROOM_VERSION:-coolify}
+    expose:
+      - "8080"
+    environment:
+      # --- fixed for Coolify: TLS is handled by Coolify's proxy ----------
+      HTTP_ONLY: "1"
+      HTTP_ADDR: ":8080"
+      MAILROOM_DATA_DIR: /data
+      # The proxy reaches the container over Docker's private networks;
+      # trust its X-Forwarded-For only from there (rate limits per visitor).
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7}
+
+      # --- the public address ------------------------------------------
+      # The https URL of the domain you set in Coolify (without :8080).
+      # Empty = https://APP_SUBDOMAIN.DOMAIN.
+      BASE_URL: ${BASE_URL:-}
+      APP_SUBDOMAIN: ${APP_SUBDOMAIN:-newsletter}
+
+      # --- sender (required) -------------------------------------------
+      DOMAIN: ${DOMAIN:?}
+      FROM_NAME: ${FROM_NAME:?}
+      FROM_EMAIL: ${FROM_EMAIL:?}
+      REPLY_TO_EMAIL: ${REPLY_TO_EMAIL:?}
+      COMPANY_FOOTER: ${COMPANY_FOOTER:?}
+      OWNER_EMAIL: ${OWNER_EMAIL:?}
+      TIMEZONE: ${TIMEZONE:-Europe/Copenhagen}
+      MAIL_FROM_SUBDOMAIN: ${MAIL_FROM_SUBDOMAIN:-bounce}
+
+      # --- Amazon SES: the SENDING user's values written by
+      #     "mailroom provision ses" (deploy/coolify.md step 3) -----------
+      AWS_REGION: ${AWS_REGION:-eu-central-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      SNS_TOPIC_ARN: ${SNS_TOPIC_ARN:-}
+      SES_CONFIGURATION_SET: ${SES_CONFIGURATION_SET:-mailroom}
+      BACKUP_BUCKET: ${BACKUP_BUCKET:-}
+
+      # --- optional first-start bootstrap (no shell needed) -------------
+      # Creates the first admin user and an admin API token named
+      # "bootstrap" on the first start only. Remove them after the setup.
+      MAILROOM_ADMIN_EMAIL: ${MAILROOM_ADMIN_EMAIL:-}
+      MAILROOM_ADMIN_PASSWORD: ${MAILROOM_ADMIN_PASSWORD:-}
+      MAILROOM_BOOTSTRAP_TOKEN: ${MAILROOM_BOOTSTRAP_TOKEN:-}
+
+      MAILROOM_LOG_LEVEL: ${MAILROOM_LOG_LEVEL:-info}
+    volumes:
+      - mailroom-data:/data
+    restart: unless-stopped
+    stop_grace_period: 60s
+    healthcheck:
+      # The image has no shell or curl: the binary probes its own /healthz.
+      test: ["CMD", "/mailroom", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+volumes:
+  mailroom-data:
