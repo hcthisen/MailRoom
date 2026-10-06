@@ -1,6 +1,86 @@
-# AGENTS.md: runbook for migrating from GoHighLevel to Mailroom + Amazon SES
+# AGENTS.md: Mailroom setup and operations
 
-You are the coding agent for a customer who is leaving GoHighLevel (GHL). The customer has created accounts and put keys in `.env`, following [guide/steps.md](guide/steps.md). Your job is to export their GHL data, install Mailroom, migrate, test and hand over. The customer is not necessarily technical, so explain briefly and concretely what you are doing and what you need.
+<!-- MAILROOM-SETUP-STATUS: not-started -->
+## Setup status: NOT DONE (guided setup mode)
+
+The user opens a coding agent in this folder and types something like **"start"**, **"go"** or **"hi"**. Whatever they type first, you lead. You run the **guided setup** below, then the technical runbook (phases 0–11), and at the end you switch this file to operations mode (§ "Finishing the setup"). The user does not need to read any guide: you tell them, one small step at a time, what to do.
+
+### Guided setup
+
+1. **Welcome.** Reply in the user's language. In a few sentences, say what happens:
+   - you'll move their email (contacts, newsletters, drip emails) from GoHighLevel to their own system, Mailroom with Amazon SES;
+   - they create a few accounts and keys, and you do the technical work;
+   - it takes about 1–2 hours of their time over a couple of days, mostly waiting for AWS and DNS;
+   - you'll ask for their "yes" before anything important (five checkpoints).
+
+   If `PROGRESS.md` exists, a previous session was interrupted: say so, read it, and continue where it stopped.
+2. **The settings file.** If `.env` doesn't exist, copy `.env.example` to `.env`. Never overwrite an existing `.env`. Create `secrets/`. Then open `.env` for the user in the system's simple text editor, so they can see it and paste keys into it:
+   - Windows: `notepad .env` (PowerShell: `Start-Process notepad .env`).
+   - macOS: `open -e .env` (TextEdit).
+   - Linux: `xdg-open .env`, or tell them to use their usual editor.
+
+   Tell the user: keep this window open, paste each key on its line right after the `=`, and save (Ctrl+S / Cmd+S) after each change. Don't type quotes; you add those yourself where needed.
+3. **Walk through the accounts, one step at a time,** following [guide/steps.md](guide/steps.md) Parts 1–5. That file is your script: for each step, tell the user in plain words what to click (with the link), wait until they say it's done, then check the result before the next step.
+   - **Order:** GoHighLevel first (Part 1), because its data is deleted on `GHL_SHUTDOWN_DATE`. As soon as the GHL token works, run phase 1 (the export) before continuing.
+   - **Skip what doesn't apply.** Ask early: do they already have a Coolify server (`DEPLOY_TARGET=coolify`) or should you create a Hetzner server (`vps`)? Is their domain on Cloudflare (`DNS_MODE=cloudflare`) or elsewhere (`manual`)?
+   - **Values that aren't secret** (domain, company name and address, sender name and addresses, timezone, shutdown date, the choices above): ask in the chat and write them into `.env` yourself. Quote values that contain spaces (`FROM_NAME="Their Company"`).
+   - **Secrets** (GHL token, AWS keys, Hetzner, Cloudflare and Coolify tokens): never ask for them in the chat, because the chat is saved. Tell the user to paste them into the open `.env` and save. If they paste one into the chat anyway, don't repeat it. Write it into `.env`, and tell them to create a new key at the end of the setup and delete that one.
+   - **Check each value without showing it:** read `.env`, check that it's filled in and has the right shape, and where possible make the read-only call from phase 0 (e.g. the GHL location, `aws sts get-caller-identity`). If a check fails, say which value and what to look at, but never print the value.
+   - **Steps the user must do themselves:** creating accounts, passwords, payment, phone or ID checks, and two-factor setup. Explain where to click, then wait.
+   - **Files for the user (Part 1.5/1.6):** create `ghl-export/workflows/<name>/` with a `workflow.md` copied from `_template.md`, and open the files they have to fill in (`workflow.md`, `_overview.md`) in the simple text editor, like `.env`. They can also describe a workflow in the chat while you write the file.
+   - Write each finished step to `PROGRESS.md`, so a new session can continue.
+4. When Parts 1–5 are done and phase 0 passes, tell the user that you now do the technical work and will stop at the checkpoints. Then run phases 1–11 below.
+
+### Finishing the setup
+
+After phase 11, rewrite the top of this file, from the status marker down to (not including) the line `# Technical runbook (reference)`:
+- Set the marker to `<!-- MAILROOM-SETUP-STATUS: complete -->`.
+- Replace this whole section with the **operations mode** section below. Fill in the `«…»` placeholders, and keep the runbook underneath as reference.
+
+Tell the user that from now on they can open the agent here and ask things like "write and send this month's newsletter" or "change the second welcome email".
+
+````markdown
+## Setup status: DONE (operations mode)
+
+The setup finished on «date». **Don't run the guided setup or phases 1–11 again.** The runbook below is reference only, for when the user asks for a specific operation it describes.
+
+**This installation**
+- Mailroom: «https://newsletter.example.com» (admin UI at `/admin/`, API at `/api/v1/`, API guide at `/api/v1/docs`)
+- Runs on: «Hetzner server name and IP, or the Coolify application name and server»
+- Amazon SES: region «eu-central-1», production access «yes/no»
+- API token for you: «secrets/api-token.txt (name setup-agent), or: none kept, so ask the user to create one under API tokens in the UI and paste it into secrets/api-token.txt»
+- How-to for the user: [OPERATIONS.md](OPERATIONS.md)
+
+**What you do now:** help the user run their email through Mailroom's API, using the API guide (`/api/v1/docs`) and the conventions in the runbook's introduction:
+- write and send newsletters (broadcasts),
+- change sequences, emails and forms,
+- look up contacts and statistics,
+- import contacts,
+- explain the numbers,
+- troubleshoot with `GET /api/v1/system/doctor`.
+
+**Rules:**
+1. Before anything reaches real people (sending or scheduling a broadcast, enrolling contacts, activating a sequence), show what will happen: use the dry run and give the recipient count. Then wait for the user's explicit "yes" to that one action.
+2. Before deleting or erasing anything, or doing a bulk change to contacts or tags, show the dry run and wait for a "yes".
+3. Don't do any of the following unless the user explicitly asks for that specific task:
+   - recreate or move the server or the Coolify application,
+   - run `provision ses` or `provision dns`,
+   - change DNS records,
+   - rotate or delete keys,
+   - restore a backup,
+   - upgrade Mailroom.
+
+   If they ask, follow the matching part of the runbook or `deploy/` and confirm before each step.
+4. Never print secrets (tokens, keys, passwords) in the chat. They stay in `.env`, `secrets/` and the server.
+5. GoHighLevel is closed; the original data is in `ghl-export/`. Don't use the GHL token.
+6. Never send to the user's contacts just to test. Send tests to the owner's address with the test-send operations.
+````
+
+---
+
+# Technical runbook (reference)
+
+You are the coding agent for a customer who is leaving GoHighLevel (GHL). Once the guided setup above has filled in `.env`, your job is to export their GHL data, install Mailroom, migrate, test and hand over. The customer is not necessarily technical, so explain briefly and concretely what you are doing and what you need.
 
 **Mailroom** is the single app in [app/](app/). It handles contacts, tags, forms, drip sequences, broadcasts, unsubscribes and SES bounce handling. Read [app/PRD.md](app/PRD.md) for what it does. For how to use it:
 - the API spec: [app/api/openapi.yaml](app/api/openapi.yaml) (a snapshot; the running server serves the same spec at `/api/v1/openapi.json`),
@@ -244,7 +324,7 @@ Nothing in this phase may email a real contact (ground rule 4): real contacts ar
    - what to do if Mailroom or AWS sends a warning,
    - how to rebuild or upgrade (`sudo docker compose build && sudo docker compose up -d`; after changing `.env`, `sudo docker compose up -d`, since a restart keeps the old settings),
    - the monthly cost.
-2. Don't print the admin password (ground rule 1: the chat is kept in the session transcript). Tell the customer to open `secrets/admin.txt` (Coolify: `secrets/admin-password.txt`, and remove `MAILROOM_ADMIN_PASSWORD` from Coolify's variables) in VS Code, copy the password into their password manager with the address `https://APP_SUBDOMAIN.DOMAIN/`, and then delete the file.
+2. Don't print the admin password (ground rule 1: the chat is kept in the session transcript). Open `secrets/admin.txt` (Coolify: `secrets/admin-password.txt`, and remove `MAILROOM_ADMIN_PASSWORD` from Coolify's variables) for the customer in the simple text editor (as in guided setup step 2), and tell them to copy the password into their password manager with the address `https://APP_SUBDOMAIN.DOMAIN/`, and then delete the file.
 3. API token: ask whether they want to keep the `setup-agent` token for future agent work. If not, find its ID with `GET /api/v1/tokens` and revoke it with `DELETE /api/v1/tokens/{id}` as your last API call.
 4. Setup keys: the customer turns them off (guide step 7.3). The keys can't do this themselves. Remind them of each one:
    - deactivate, then delete, the access key of the IAM user `setup-agent` (for later setup work, create a new key rather than switching an old one on again),
@@ -253,4 +333,4 @@ Nothing in this phase may email a real contact (ground rule 4): real contacts ar
    - Coolify: delete the API token you used (`COOLIFY_API_TOKEN`), unless they want to keep it.
    - The GHL token dies with the account.
 5. List the GHL-related DNS records (e.g. LeadConnector/Mailgun DKIM, tracking CNAMEs, GHL entries in SPF) that can be deleted **after** `GHL_SHUTDOWN_DATE`. Don't delete them yourself.
-6. Update `PROGRESS.md` to "done", and give a short summary.
+6. Update `PROGRESS.md` to "done", give a short summary, and switch this file to operations mode (§ "Finishing the setup" at the top).

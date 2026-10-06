@@ -5,28 +5,29 @@ This file is the source for the client guide. Each step says what to do in plain
 - 📸 marks a screenshot the capture agent must take (file name, what must be visible, what to highlight, what to blur).
 - ➡️ `.env` marks a value that goes into the settings file.
 
-The client does **Parts 0–5** (about 1–2 hours, plus waiting time for account approvals). After that the coding agent does the technical work, and the client only answers its questions (**Part 6**) and finishes up (**Part 7**).
+**You don't have to follow this file yourself.** Start the coding agent in the `crm-marketing` folder and type `start` (Part 0). The agent walks you through Parts 1–5 one step at a time, using this file as its script, then does the technical work (Part 6) and tells you what to finish (Part 7). The steps take about 1–2 hours of your time, plus waiting for account approvals. This file is the reference for those steps and the source for the screenshot guide.
 
 ---
 
 ## Part 0: Get ready
 
 **0.1 Download the kit.** Download (or clone) the `crm-marketing` repository and put the folder somewhere you can find it, e.g. your Documents folder.
-📸 `00-01-kit-folder.png`: the unzipped folder open in Finder/Explorer. Highlight `.env.example`.
+📸 `00-01-kit-folder.png`: the folder open in Finder/Explorer.
 
-**0.2 Install VS Code.** Download it for free from <https://code.visualstudio.com> and install it. You'll use it to edit the settings file.
-> On a Mac, Finder hides files that start with a dot, like `.env`. VS Code shows them, so always open the folder in VS Code.
+**0.2 Install the coding agent.** Install **Claude Code** (<https://claude.com/claude-code>) or **Codex** (<https://openai.com/codex>) by following their install page.
+> The agent may ask to install a few command-line tools it needs, such as the AWS CLI, the Hetzner CLI (`hcloud`) and `jq`. On a work laptop managed by your IT department, installing may need administrator rights: check beforehand that you have them, or ask IT.
 
-**0.3 Open the kit in VS Code.** Choose **File → Open Folder** and select `crm-marketing`. Always start the coding agent in this folder: it reads its instructions from `AGENTS.md` (Claude Code via `CLAUDE.md`) there.
-📸 `00-03-vscode-open-folder.png`: VS Code with the folder open and the file list visible.
+**0.3 Start the agent in the folder.** Open a terminal in the `crm-marketing` folder:
+- **Windows:** in Explorer, open the folder, click the address bar, type `cmd` (or `powershell`) and press Enter.
+- **Mac:** right-click the folder in Finder and choose **New Terminal at Folder**. If you don't see it, turn it on under **System Settings → Keyboard → Keyboard Shortcuts → Services**.
 
-**0.4 Create your settings file.** In the file list, right-click `.env.example`, choose **Copy**, then **Paste**, and rename the copy to `.env`. Keep `.env` open. You'll fill it in as you go.
-📸 `00-04-env-file.png`: `.env` open in the editor. Highlight the file name in the tab.
+Then type `claude` (or `codex`) and press Enter. The first time, you'll be asked to log in.
+📸 `00-03-terminal.png`: the terminal in the folder with the agent started.
 
-**0.5 Install the coding agent.** Install **Claude Code** (<https://claude.com/claude-code>) or **Codex** (<https://openai.com/codex>) by following their install page. You'll use it in Part 6.
-> In Part 6 the agent may ask to install a few command-line tools it needs, such as the AWS CLI, the Hetzner CLI (`hcloud`) and `jq`. On a work laptop managed by your IT department, installing may need administrator rights: check beforehand that you have them, or ask IT.
+**0.4 Type `start`.** The agent takes it from here. It creates your settings file (`.env`), opens it in Notepad (Windows) or TextEdit (Mac), and guides you through Parts 1–5 one step at a time. Paste keys into that file, never into the chat: the chat is saved. You only type into the chat what the agent asks for, such as your company name.
+📸 `00-04-agent-welcome.png`: the agent's welcome message and the opened `.env`.
 
-**0.6 Get a password manager ready.** Use 1Password, Bitwarden or your browser's password manager. Every password and key you create goes there.
+**0.5 Get a password manager ready.** Use 1Password, Bitwarden or your browser's password manager. Every password and key you create goes there.
 
 ---
 
@@ -71,7 +72,7 @@ The client does **Parts 0–5** (about 1–2 hours, plus waiting time for accoun
 ➡️ `.env`: `GHL_TOKEN=`
 > Can't see "Private Integrations"? Your user needs to be an admin of the sub-account. Contact {{AGENCY}} before {{SHUTDOWN_DATE}}.
 
-**1.5 Document each email workflow.** Workflows can't be exported, so you capture them yourself. For each workflow that sends emails:
+**1.5 Document each email workflow.** Workflows can't be exported, so you capture them yourself. The agent creates the folders and files for you and opens them in Notepad/TextEdit. For each workflow that sends emails:
 1. Go to **Automation → Workflows** and open the workflow.
 2. Take a screenshot of the whole flow. Zoom out so every step is visible.
 3. Click each **Send Email** step, copy the subject and the email content, and paste them into a new file in the kit: `ghl-export/workflows/<workflow-name>/01-<short-name>.html`.
@@ -80,10 +81,10 @@ The client does **Parts 0–5** (about 1–2 hours, plus waiting time for accoun
 📸 `01-05a-workflows-list.png`: the workflow list. Highlight one workflow.
 📸 `01-05b-workflow-canvas.png`: an open workflow showing all its steps.
 📸 `01-05c-email-step.png`: an open Send Email step. Highlight the subject and the content.
-📸 `01-05d-workflow-md-filled.png`: VS Code with a filled-in `workflow.md`.
+📸 `01-05d-workflow-md-filled.png`: a filled-in `workflow.md` in Notepad/TextEdit.
 
 **1.6 List your forms and other GHL features.** Open `ghl-export/workflows/_overview.md` and fill in which forms on your website send sign-ups to GoHighLevel, and whether you use SMS, calendars or anything else. Those other features aren't covered by this solution.
-📸 `01-06-overview-filled.png`: VS Code with the filled-in overview.
+📸 `01-06-overview-filled.png`: the filled-in overview in Notepad/TextEdit.
 
 ---
 
@@ -268,15 +269,9 @@ Save the file (**Ctrl+S** / **Cmd+S**).
 
 ## Part 6: Let the agent do the work
 
-**6.1 Open a terminal in the kit.** In VS Code, choose **Terminal → New Terminal**.
-📸 `06-01-terminal.png`: VS Code with the terminal open at the bottom.
+When Parts 1–5 are done, the agent continues by itself in the same session. If you closed it, start it again in the folder (0.3) and type `start`: it reads its notes (`PROGRESS.md`) and continues where it stopped.
 
-**6.2 Start the agent.** Type `claude` (or `codex`) and press Enter. The first time, you'll be asked to log in.
-
-**6.3 Give it the task.** Type: **Follow AGENTS.md and set up my solution.** and press Enter.
-📸 `06-03-first-prompt.png`: the agent with the prompt typed in.
-
-**6.4 Answer when it asks.** The agent works on its own, but stops at five points and waits for your "yes":
+**6.1 Answer when it asks.** The agent works on its own, but stops at five points and waits for your "yes":
 1. It shows what it exported from GoHighLevel. Check the numbers.
 2. It shows the text for the AWS request to start sending. After that, watch your inbox, because AWS may email you questions.
 3. DNS: either it shows what it will add in Cloudflare, or it gives you the table from 4B.2.
@@ -291,7 +286,7 @@ Expect it to take a couple of days in total, mostly waiting for AWS and DNS.
 
 ## Part 7: When the agent is done
 
-**7.1 Save your Mailroom login.** The agent doesn't write your Mailroom password in the chat (the chat is saved). It tells you to open the file `secrets/admin.txt` in VS Code instead. Copy the password from there into your password manager together with the address `https://newsletter.yourdomain.com`, then delete the file.
+**7.1 Save your Mailroom login.** The agent doesn't write your Mailroom password in the chat (the chat is saved). It opens the file `secrets/admin.txt` for you in Notepad or TextEdit instead. Copy the password from there into your password manager together with the address `https://newsletter.yourdomain.com`, then delete the file.
 📸 `07-01-mailroom-login.png`: the Mailroom login page.
 
 **7.1b Decide about the agent's API key.** The agent asks whether it should keep its Mailroom API key. Keep it if you want a coding agent to help you later (e.g. "write and send this month's newsletter"). Otherwise the agent deletes it. You can always create a new one in Mailroom under **API tokens**.

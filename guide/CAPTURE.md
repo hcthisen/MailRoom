@@ -11,7 +11,7 @@ You walk through [steps.md](steps.md) on a demo setup and take every 📸 screen
 | A **demo Hetzner account/project** | Same reason |
 | A **demo domain that is Active on Cloudflare** | For Option A |
 | A **clean browser profile**: English UI, light mode, 100% zoom, window 1440×900, no bookmarks bar, no extensions visible | So all screenshots look the same |
-| The kit folder with a copy of `.env.example` | For the VS Code steps |
+| The repository folder, with Claude Code or Codex installed | For the Part 0 steps (the agent creates `.env` itself) |
 
 Set the UI language to **English** in GHL, AWS, Hetzner and Cloudflare before you start.
 
@@ -27,7 +27,7 @@ After the operator has finished, take the screenshot the step asks for (if any).
 ## How to take each screenshot
 
 1. Get the screen into the state the 📸 line describes. The element to highlight must be visible, and must not be clicked yet (for "click X" steps).
-2. Capture the **whole browser window** (or the whole VS Code/terminal window).
+2. Capture the **whole browser window** (or the whole terminal or text-editor window).
 3. Save it as `guide/captures/raw/<file name from steps.md>`.
 4. Add one entry to `guide/captures/manifest.json`:
 

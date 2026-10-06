@@ -17,9 +17,13 @@ New Amazon SES accounts start in a test mode (the "sandbox") that can only send 
 
 ## Start here
 
-➡️ **Follow the step-by-step guide: [guide/steps.md](guide/steps.md)**
+1. Install a coding agent: [Claude Code](https://claude.com/claude-code) or [Codex](https://openai.com/codex).
+2. Open a terminal in this folder and start it (`claude` or `codex`).
+3. Type **`start`**.
 
-Start your coding agent (Claude Code or Codex) **in this folder**. It reads its instructions from [AGENTS.md](AGENTS.md); Claude Code finds them through [CLAUDE.md](CLAUDE.md).
+The agent creates your settings file, opens it in Notepad or TextEdit, and guides you through every step: which accounts to create, where to click, and where to paste each key. Then it does the technical work and stops for your "yes" at five checkpoints. It reads its instructions from [AGENTS.md](AGENTS.md) (Claude Code finds them through [CLAUDE.md](CLAUDE.md)). The same steps are written out in [guide/steps.md](guide/steps.md) if you want to read ahead.
+
+When the setup is finished, the agent marks it as done in `AGENTS.md`. From then on, starting the agent here gives you a helper for your newsletters and drip emails ("write this month's newsletter", "change the second welcome email"). It won't redo the setup.
 
 ## Two ways to run Mailroom
 
@@ -44,7 +48,7 @@ Choose with `DEPLOY_TARGET` in `.env`.
 
 | File | For |
 |---|---|
-| [guide/steps.md](guide/steps.md) | You: what to click, step by step. The screenshots (📸) are still to come: [guide/CAPTURE.md](guide/CAPTURE.md) is the brief for capturing them, and until they are added the text alone describes every step |
+| [guide/steps.md](guide/steps.md) | The agent's script for guiding you (you can read ahead): what to click, step by step. The screenshots (📸) are still to come: [guide/CAPTURE.md](guide/CAPTURE.md) is the brief for capturing them, and until they are added the text alone describes every step |
 | `.env.example` → `.env` | You: where your keys and settings go. **Never share `.env`.** |
 | `ghl-export/` | You: your exported GoHighLevel data and workflow notes |
 | [AGENTS.md](AGENTS.md) | The coding agent: the technical runbook (`CLAUDE.md` points Claude Code to it) |
