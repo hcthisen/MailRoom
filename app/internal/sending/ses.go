@@ -84,11 +84,13 @@ func (p *SESProvider) AccountAPI() AccountAPI { return p.client }
 // Send sends m.Raw to m.To. The provider message ID is the SES MessageId.
 // Errors are *core.ProviderError (see classifySESError).
 func (p *SESProvider) Send(ctx context.Context, m core.OutgoingEmail) (string, error) {
+	// Raw MIME already contains the validated, encoded From header. Setting
+	// FromEmailAddress to the bare envelope address would replace its display
+	// name. Leave this optional API field unset so the MIME sender is used.
 	in := &sesv2.SendEmailInput{
-		FromEmailAddress: aws.String(m.From),
-		Destination:      &types.Destination{ToAddresses: []string{m.To}},
-		Content:          &types.EmailContent{Raw: &types.RawMessage{Data: m.Raw}},
-		EmailTags:        sesTags(m.Tags),
+		Destination: &types.Destination{ToAddresses: []string{m.To}},
+		Content:     &types.EmailContent{Raw: &types.RawMessage{Data: m.Raw}},
+		EmailTags:   sesTags(m.Tags),
 	}
 	if p.configSet != "" {
 		in.ConfigurationSetName = aws.String(p.configSet)

@@ -28,11 +28,18 @@ func TestCoolifyComposeFile(t *testing.T) {
 			Expose      []string          `yaml:"expose"`
 			Environment map[string]string `yaml:"environment"`
 			Volumes     []string          `yaml:"volumes"`
+			Networks    map[string]struct {
+				Aliases []string `yaml:"aliases"`
+			} `yaml:"networks"`
 			Healthcheck struct {
 				Test []string `yaml:"test"`
 			} `yaml:"healthcheck"`
 		} `yaml:"services"`
-		Volumes map[string]any `yaml:"volumes"`
+		Volumes  map[string]any `yaml:"volumes"`
+		Networks map[string]struct {
+			Name     string `yaml:"name"`
+			External bool   `yaml:"external"`
+		} `yaml:"networks"`
 	}
 	if err := yaml.Unmarshal([]byte(readFile(t, path)), &c); err != nil {
 		t.Fatal(err)
@@ -49,6 +56,12 @@ func TestCoolifyComposeFile(t *testing.T) {
 	}
 	if !slices.Contains(svc.Expose, "8080") {
 		t.Errorf("expose = %v, want 8080", svc.Expose)
+	}
+	if network, ok := c.Networks["coolify"]; !ok || !network.External || network.Name != "coolify" {
+		t.Error("internal website route requires the existing external coolify network")
+	}
+	if !slices.Contains(svc.Networks["coolify"].Aliases, "titanclaws-mailroom") {
+		t.Error("internal website route requires the stable titanclaws-mailroom alias")
 	}
 	env := svc.Environment
 	if env["HTTP_ONLY"] != "1" || env["HTTP_ADDR"] != ":8080" || env["MAILROOM_DATA_DIR"] != "/data" {

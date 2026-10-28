@@ -229,6 +229,24 @@ func TestSendOutcomeAndHeaders(t *testing.T) {
 	}
 }
 
+func TestBroadcastDefaultSenderName(t *testing.T) {
+	e := newEnv(t)
+	bID, emailID := e.broadcast("sending")
+	// NULL means use the sender settings, rather than an empty override.
+	testutil.Exec(t, e.db, `UPDATE broadcasts SET from_name = NULL, reply_to = NULL WHERE id = ?`, bID)
+	c := testutil.InsertContact(t, e.db, "default-sender@example.org", core.StatusActive)
+	id := e.broadcastMessage(bID, emailID, c)
+	e.sendDue()
+	sent := e.provider.SentTo(c.Email)
+	if len(sent) != 1 || e.row(id).Status != "sent" {
+		t.Fatalf("default-sender broadcast was not sent: %+v", e.row(id))
+	}
+	h := parseMessage(t, sent[0].Raw).Header
+	if h.Get("From") != `"Example News" <news@example.com>` || h.Get("Reply-To") != "<hello@example.com>" {
+		t.Fatalf("default-sender headers = %v", h)
+	}
+}
+
 func TestRenderAndConfigFailures(t *testing.T) {
 	tests := []struct {
 		name  string

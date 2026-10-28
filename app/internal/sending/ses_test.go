@@ -1,6 +1,7 @@
 package sending
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -8,9 +9,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"syscall"
 	"testing"
+	"time"
 
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
@@ -115,7 +118,7 @@ func TestSESProviderSend(t *testing.T) {
 		t.Fatalf("Send = %q %v", id, err)
 	}
 	in := f.in
-	if *in.FromEmailAddress != "news@example.com" || in.Destination.ToAddresses[0] != "alice@example.org" ||
+	if in.FromEmailAddress != nil || in.Destination.ToAddresses[0] != "alice@example.org" ||
 		string(in.Content.Raw.Data) != "raw" || *in.ConfigurationSetName != "mailroom" {
 		t.Fatalf("input = %+v", in)
 	}
@@ -137,6 +140,48 @@ func TestSESProviderSend(t *testing.T) {
 	f.err, f.out = nil, &sesv2.SendEmailOutput{}
 	if _, err := p.Send(context.Background(), core.OutgoingEmail{}); !errors.As(err, &pe) || pe.Code != "NoMessageId" {
 		t.Fatalf("missing MessageId: %v", err)
+	}
+}
+
+// SES must use the MIME From, including its encoded display name, rather
+// than an API-level bare address overriding the sender the user selected.
+func TestSESProviderPreservesRawSender(t *testing.T) {
+	for _, name := range []string{"Titan Claws", "Café Ünïcode"} {
+		t.Run(name, func(t *testing.T) {
+			raw, err := buildMIME(mimeMessage{
+				FromName: name, From: "news@example.com", To: "alice@example.org", ReplyTo: "hello@example.com",
+				Subject: "News", Text: "Hello", HTML: "<p>Hello</p>",
+				Date: time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC), MessageID: "test@example.com",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			f := &fakeSES{out: &sesv2.SendEmailOutput{MessageId: str("raw-sender")}}
+			p := &SESProvider{api: f, configSet: "mailroom"}
+			_, err = p.Send(context.Background(), core.OutgoingEmail{
+				From: "news@example.com", To: "alice@example.org", ReplyTo: "hello@example.com", Raw: raw,
+				Tags: map[string]string{"kind": "broadcast", "message_id": "42"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			in := f.in
+			if in.FromEmailAddress != nil || len(in.ReplyToAddresses) != 0 {
+				t.Fatal("API fields must not override raw sender or reply-to headers")
+			}
+			if !bytes.Equal(in.Content.Raw.Data, raw) || len(in.Destination.ToAddresses) != 1 ||
+				in.Destination.ToAddresses[0] != "alice@example.org" || *in.ConfigurationSetName != "mailroom" {
+				t.Fatal("raw message, destination or configuration set changed")
+			}
+			from, err := mail.ParseAddress(parseMessage(t, in.Content.Raw.Data).Header.Get("From"))
+			if err != nil || from.Name != name || from.Address != "news@example.com" {
+				t.Fatalf("MIME sender = %+v, %v", from, err)
+			}
+			if len(in.EmailTags) != 2 || *in.EmailTags[0].Name != "kind" || *in.EmailTags[0].Value != "broadcast" ||
+				*in.EmailTags[1].Name != "message_id" || *in.EmailTags[1].Value != "42" {
+				t.Fatalf("message correlation tags = %+v", in.EmailTags)
+			}
+		})
 	}
 }
 

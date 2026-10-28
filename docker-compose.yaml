@@ -23,6 +23,13 @@ services:
         VERSION: ${MAILROOM_VERSION:-coolify}
     expose:
       - "8080"
+    # The website forwards its validated visitor IP over this internal route.
+    # Keep Coolify's connect_to_docker_network=false: its automatic mapping
+    # would replace these explicit network aliases. No host port is published.
+    networks:
+      coolify:
+        aliases:
+          - titanclaws-mailroom
     environment:
       # --- fixed for Coolify: TLS is handled by Coolify's proxy ----------
       HTTP_ONLY: "1"
@@ -79,3 +86,8 @@ services:
 
 volumes:
   mailroom-data:
+
+networks:
+  coolify:
+    external: true
+    name: coolify
