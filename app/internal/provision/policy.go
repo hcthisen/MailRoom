@@ -66,7 +66,11 @@ const policyVersion = "2012-10-17"
 // outlives the key that made it: without the endpoint condition, anyone
 // holding a leaked sending key could subscribe their own endpoint and keep
 // receiving them after the key is rotated.
-func SenderPolicy(identityARN, configSetARN, topicARN, bucketARN, webhookURL string) PolicyDocument {
+//
+// With an inbound bucket (receiving on), it may also read and delete the
+// received mail under inbound/: the fetcher deletes each message once it
+// is stored in the database.
+func SenderPolicy(identityARN, configSetARN, topicARN, bucketARN, webhookURL string, inboundBucketARN ...string) PolicyDocument {
 	p := PolicyDocument{
 		Version: policyVersion,
 		Statement: []Statement{
@@ -88,6 +92,14 @@ func SenderPolicy(identityARN, configSetARN, topicARN, bucketARN, webhookURL str
 			Statement{Sid: "ListBackups", Effect: "Allow", Action: StringList{"s3:ListBucket"}, Resource: StringList{bucketARN}},
 			Statement{Sid: "WriteBackups", Effect: "Allow", Action: StringList{"s3:PutObject"}, Resource: StringList{bucketARN + "/*"}},
 		)
+	}
+	for _, in := range inboundBucketARN {
+		if in != "" {
+			p.Statement = append(p.Statement, Statement{
+				Sid: "ReadInbound", Effect: "Allow", Action: StringList{"s3:GetObject", "s3:DeleteObject"},
+				Resource: StringList{in + "/" + InboundPrefix + "*"},
+			})
+		}
 	}
 	return p
 }
@@ -114,8 +126,9 @@ func WebhookURL(baseURL, appSubdomain, domain string) string {
 }
 
 // TopicPolicy lets SES publish to the topic, and only on behalf of this
-// account's configuration set.
-func TopicPolicy(topicARN, account, configSetARN string) PolicyDocument {
+// account's configuration set (sending events) and, when receiving is on,
+// its receipt rule (received mail).
+func TopicPolicy(topicARN, account string, sourceARNs ...string) PolicyDocument {
 	return PolicyDocument{
 		Version: policyVersion,
 		ID:      TopicName + "-policy",
@@ -128,7 +141,7 @@ func TopicPolicy(topicARN, account, configSetARN string) PolicyDocument {
 			Condition: map[string]map[string]StringList{
 				"StringEquals": {
 					"AWS:SourceAccount": {account},
-					"AWS:SourceArn":     {configSetARN},
+					"AWS:SourceArn":     StringList(sourceARNs),
 				},
 			},
 		}},

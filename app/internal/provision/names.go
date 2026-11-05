@@ -25,6 +25,17 @@ const (
 	WebhookPath = "/hooks/ses"
 	// LifecycleRuleID names the bucket's expiry rule.
 	LifecycleRuleID = "mailroom-expire-backups"
+	// ReceiptRuleSetName is the SES receipt rule set receiving uses.
+	ReceiptRuleSetName = "mailroom"
+	// ReceiptRuleName is the rule that stores mail to DOMAIN in the bucket.
+	ReceiptRuleName = "mailroom-inbound"
+	// InboundPrefix is the key prefix of received mail in the inbound bucket.
+	InboundPrefix = "inbound/"
+	// InboundRetentionDays is how long the bucket keeps received mail;
+	// Mailroom copies each message into its database within minutes.
+	InboundRetentionDays = 30
+	// InboundLifecycleRuleID names the inbound bucket's expiry rule.
+	InboundLifecycleRuleID = "mailroom-expire-inbound"
 	// DefaultEnvFile is the server env file "provision ses" writes.
 	DefaultEnvFile = "/opt/mailroom/.env"
 )

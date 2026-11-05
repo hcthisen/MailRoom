@@ -21,6 +21,7 @@ const (
 	TimelineTagAdded     = "tag_added"
 	TimelineMessage      = "message"
 	TimelineClick        = "click"
+	TimelineReceived     = "received"
 	// Events use their own type: delivery, bounce, complaint, reject,
 	// unsubscribe, send_error.
 )
@@ -28,7 +29,7 @@ const (
 // TimelineItem is one entry of a contact's timeline (C-7).
 type TimelineItem struct {
 	At      time.Time      `json:"at"`
-	Type    string         `json:"type" doc:"consent, status_change, tag_added, message, click, or a message event type (delivery, bounce, complaint, reject, unsubscribe, send_error)" example:"message"`
+	Type    string         `json:"type" doc:"consent, status_change, tag_added, message, click, received (an email from the contact, in the Inbox), or a message event type (delivery, bounce, complaint, reject, unsubscribe, send_error)" example:"message"`
 	Summary string         `json:"summary" doc:"One-line human-readable description" example:"Broadcast email sent: April news"`
 	Detail  map[string]any `json:"detail" doc:"Structured details; the keys depend on the type"`
 
@@ -95,7 +96,8 @@ type timelineSource struct {
 }
 
 // Timeline returns a contact's history, newest first: consent events,
-// status changes, tags added, messages, message events and clicks.
+// status changes, tags added, messages, message events, clicks and email
+// received from the contact.
 func (s *Service) Timeline(ctx context.Context, contactID int64, cursor string, limit int) (TimelinePage, error) {
 	if limit <= 0 {
 		limit = DefaultTimelineLimit
@@ -192,7 +194,7 @@ var timelineSources = []timelineSource{
 			var formID sql.NullInt64
 			err := rows.Scan(&it.atRaw, &it.id, &typ, &source, &formID, &ip, &ua, &text)
 			it.Type = TimelineConsent
-			it.Summary = fmt.Sprintf("Consent (%s) from %s", typ, source)
+			it.Summary = "Consent: " + consentSource(typ, source)
 			it.Detail = map[string]any{"type": typ, "source": source, "form_id": nullInt(formID),
 				"ip": ip, "user_agent": ua, "consent_text": text}
 			return it, err
@@ -241,7 +243,10 @@ var timelineSources = []timelineSource{
 			err := rows.Scan(&it.atRaw, &it.id, &kind, &subject, &status, &queued, &sent, &delivered,
 				&broadcastID, &enrollmentID)
 			it.Type = TimelineMessage
-			it.Summary = fmt.Sprintf("%s email %s: %s", titleCase(kind), status, subject)
+			it.Summary = fmt.Sprintf("%s email %s", titleCase(kind), status)
+			if subject != "" {
+				it.Summary += ": " + subject
+			}
 			it.Detail = map[string]any{"message_id": it.id, "kind": kind, "subject": subject, "status": status,
 				"queued_at": nullTime(sql.NullString{String: queued, Valid: true}), "sent_at": nullTime(sent),
 				"delivered_at": nullTime(delivered), "broadcast_id": nullInt(broadcastID), "enrollment_id": nullInt(enrollmentID)}
@@ -279,6 +284,20 @@ var timelineSources = []timelineSource{
 			it.Type = TimelineClick
 			it.Summary = "Clicked " + url
 			it.Detail = map[string]any{"url": url, "message_id": nullInt(msgID)}
+			return it, err
+		},
+	},
+	{
+		rank: 7, at: "received_at", id: "id",
+		query: `SELECT received_at, id, subject, snippet
+			FROM inbound_messages WHERE status = 'received' AND contact_id = ?`,
+		scan: func(rows *sql.Rows) (TimelineItem, error) {
+			var it TimelineItem
+			var subject, snippet string
+			err := rows.Scan(&it.atRaw, &it.id, &subject, &snippet)
+			it.Type = TimelineReceived
+			it.Summary = "Emailed you: " + subject
+			it.Detail = map[string]any{"inbound_id": it.id, "subject": subject, "snippet": snippet}
 			return it, err
 		},
 	},
@@ -395,4 +414,32 @@ func listEnrollments(ctx context.Context, q db.Querier, contactID, beforeID int6
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// consentSource describes where a consent came from in plain words
+// (the timeline summary; the raw values stay in Detail).
+func consentSource(typ, source string) string {
+	kind, rest, _ := strings.Cut(source, ":")
+	switch {
+	case typ == "import" || kind == "import":
+		return "imported from a CSV file"
+	case kind == "form":
+		return "signed up with a form"
+	case typ == "optin":
+		return "confirmed by email (double opt-in)"
+	case kind == "admin" || typ == "admin":
+		if rest != "" && rest != "admin" {
+			return "added by hand: " + rest
+		}
+		return "added by hand"
+	case kind == "api" || typ == "api":
+		if rest != "" && rest != "api" {
+			return "added through the API (" + rest + ")"
+		}
+		return "added through the API"
+	}
+	if source == "" {
+		return typ
+	}
+	return typ + " (" + source + ")"
 }

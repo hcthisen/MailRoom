@@ -13,6 +13,7 @@ import (
 	"mailroom/internal/config"
 	"mailroom/internal/core"
 	"mailroom/internal/events"
+	"mailroom/internal/inbound"
 	"mailroom/internal/sending"
 	"mailroom/internal/system"
 )
@@ -33,6 +34,9 @@ type AWSClients struct {
 	// Account feeds the ses-account-poller (sending). Nil means the SES
 	// provider's own client when the provider is SES.
 	Account sending.AccountAPI
+	// Inbound fetches and deletes received mail in INBOUND_BUCKET. Nil
+	// leaves received messages pending (no inbound-fetcher worker).
+	Inbound inbound.ObjectStore
 }
 
 // NewAWSClients builds the clients for the sending user from cfg
@@ -52,7 +56,8 @@ func NewAWSClients(ctx context.Context, cfg config.Config) (AWSClients, error) {
 	if err != nil {
 		return AWSClients{}, fmt.Errorf("load AWS configuration: %w", err)
 	}
-	return AWSClients{SES: sesv2.NewFromConfig(ac), SNS: sns.NewFromConfig(ac), S3: s3.NewFromConfig(ac)}, nil
+	s3c := s3.NewFromConfig(ac)
+	return AWSClients{SES: sesv2.NewFromConfig(ac), SNS: sns.NewFromConfig(ac), S3: s3c, Inbound: s3c}, nil
 }
 
 // SNSClient returns c.SNS as the doctor's narrower interface, or nil.

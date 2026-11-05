@@ -24,6 +24,8 @@ var envKeys = []string{
 	"SNS_TOPIC_ARN",
 	"SES_CONFIGURATION_SET",
 	"BACKUP_BUCKET",
+	"INBOUND_BUCKET",
+	"INBOUND_DOMAIN",
 }
 
 // envLine matches "KEY=value" and "export KEY=value" assignments.

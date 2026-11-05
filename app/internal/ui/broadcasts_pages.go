@@ -33,7 +33,7 @@ func init() {
 		get, post := http.MethodGet, http.MethodPost
 		p := broadcastsPath
 		u.handle(Action{Method: get, Path: p, OperationID: "list-broadcasts", Handler: u.broadcastsList})
-		u.handle(Action{Method: get, Path: p + "/new", OperationID: "list-segments", Uses: []string{"get-settings"},
+		u.handle(Action{Method: get, Path: p + "/new", OperationID: "list-segments", Uses: []string{"get-settings", "list-broadcasts", "get-broadcast", "list-emails", "get-email"},
 			Handler: u.broadcastNew})
 		u.handle(Action{Method: post, Path: p, OperationID: "create-broadcast", Uses: []string{"list-segments", "get-settings"},
 			Handler: u.broadcastCreate})
@@ -104,6 +104,8 @@ type broadcastFormData struct {
 	DefaultReplyTo  string
 	FromEmail       string
 	Domain          string
+	// "Start from" choices: only on a fresh new page.
+	FromBroadcasts, FromEmails []starter
 }
 
 // audienceValue is the picker value of an audience: "all" or "segment:<id>".
@@ -230,6 +232,11 @@ func (u *UI) broadcastFormPage(w http.ResponseWriter, r *http.Request, status in
 		Form: f, Broadcast: b, Action: broadcastsPath, Audiences: opts,
 		DefaultFromName: st.Sender.FromName, DefaultReplyTo: st.Sender.ReplyTo, FromEmail: st.Sender.FromEmail, Domain: st.Domain,
 	}
+	if b == nil && status == http.StatusOK && r.Method == http.MethodGet && r.URL.Query().Get("from") == "" {
+		if d.FromBroadcasts, d.FromEmails, err = u.broadcastStarters(ctx); err != nil {
+			return err
+		}
+	}
 	v := View{Title: "New broadcast", Nav: "broadcasts", Crumbs: []Crumb{{"Broadcasts", broadcastsPath}}, Data: d}
 	if b != nil {
 		d.Action = broadcastURL(b.ID) + "/edit"
@@ -245,9 +252,14 @@ func (u *UI) broadcastFormPage(w http.ResponseWriter, r *http.Request, status in
 
 // broadcastNew is the empty form.
 func (u *UI) broadcastNew(w http.ResponseWriter, r *http.Request) error {
-	f := EmptyForm().Set("audience", broadcasts.AudienceAll).Set("format", content.FormatMarkdown)
+	f := EmptyForm().Set("audience", broadcasts.AudienceAll).Set("format", content.FormatHTML)
 	if a := r.URL.Query().Get("audience"); a != "" {
 		f.Set("audience", a)
+	}
+	if from := r.URL.Query().Get("from"); from != "" {
+		if err := u.prefillFrom(r.Context(), f, from); err != nil {
+			return err
+		}
 	}
 	return u.broadcastFormPage(w, r, http.StatusOK, f, nil)
 }
@@ -417,6 +429,9 @@ type broadcastShowData struct {
 	TestForm     *Form
 	ScheduleForm *Form
 	ResumeForm   *Form
+
+	Checklist   *broadcastChecklist // draft and scheduled only
+	OwnFromName string              // the broadcast's own From name, "" for the default
 }
 
 // broadcastShow is the detail page.
@@ -457,7 +472,7 @@ func (u *UI) renderBroadcast(w http.ResponseWriter, r *http.Request, status int,
 		CanSend:       broadcastEditable(s),
 		CanPause:      s == broadcasts.StatusSending,
 		CanResume:     s == broadcasts.StatusPaused,
-		CanCancel:     s == broadcasts.StatusDraft || s == broadcasts.StatusScheduled || s == broadcasts.StatusPaused,
+		CanCancel:     s == broadcasts.StatusScheduled || s == broadcasts.StatusPaused,
 		CanDelete:     s == broadcasts.StatusDraft || s == broadcasts.StatusCancelled,
 		BreakerPaused: s == broadcasts.StatusPaused && b.PausedReason == broadcasts.PauseCircuitBreaker,
 		SnapshotFailed: s == broadcasts.StatusPaused &&
@@ -468,13 +483,24 @@ func (u *UI) renderBroadcast(w http.ResponseWriter, r *http.Request, status int,
 		ScheduleForm: EmptyForm(),
 		ResumeForm:   EmptyForm(),
 	}
+	if b.FromName != nil {
+		d.OwnFromName = *b.FromName
+	}
 	d.ReplyTo = st.Sender.ReplyTo
 	if b.ReplyTo != nil {
 		d.ReplyTo = *b.ReplyTo
 	}
+	if broadcastEditable(s) {
+		if d.Checklist, err = u.checklist(ctx, b); err != nil {
+			return err
+		}
+	}
 	at := b.ScheduledAt
 	if at == nil {
-		next := u.clock.Now().Add(time.Hour).Truncate(time.Hour)
+		// Tomorrow at 09:00 in the settings time zone: a deliberate choice,
+		// never a time that is about to pass.
+		now := u.clock.Now().In(u.location())
+		next := time.Date(now.Year(), now.Month(), now.Day()+1, 9, 0, 0, 0, u.location())
 		at = &next
 	}
 	d.ScheduleForm.Set("at", u.fmtInputTime(at))
@@ -562,4 +588,122 @@ func (u *UI) broadcastPreview(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	return u.Partial(w, r, "broadcasts/show", "email-preview", View{Data: d})
+}
+
+// broadcastChecklist is the pre-send checklist of a draft or scheduled
+// broadcast (like Mailchimp's): recipients, sender, subject as a sample
+// contact sees it, personalisation gaps and whether a test went out.
+type broadcastChecklist struct {
+	Recipients    int
+	Subject       string // rendered for SampleName's contact (or with fallbacks)
+	SampleName    string
+	Gaps          []mergeGap
+	LastTest      *time.Time
+	TestStatus    string // the latest test message's status
+	TestDelivered bool   // it actually went out (sent or delivered)
+	Todo          int
+	Ready         bool
+}
+
+// mergeGap is a merge field used without a fallback that some contacts
+// have no value for.
+type mergeGap struct {
+	Field, Label   string
+	Missing, Total int64
+}
+
+// checklist builds the checklist of b.
+func (u *UI) checklist(ctx context.Context, b broadcasts.Broadcast) (*broadcastChecklist, error) {
+	c := &broadcastChecklist{Subject: b.Email.Subject}
+	var counts segments.SegmentCounts
+	var err error
+	f := contacts.ListFilter{Status: core.StatusActive, Limit: previewContactLimit}
+	if b.Audience.Type == broadcasts.AudienceSegment {
+		counts, err = u.d.Segments.CountSegment(ctx, b.Audience.SegmentID)
+		f.SegmentID = b.Audience.SegmentID
+	} else {
+		counts, err = u.d.Segments.Count(ctx, segments.SegmentFilter{})
+	}
+	if err != nil && !errors.Is(err, core.ErrNotFound) && !errors.Is(err, core.ErrValidation) {
+		return nil, err
+	}
+	c.Recipients = int(counts.Active)
+
+	// The subject as a real recipient sees it, preferably one with a name.
+	if cs, err := u.d.Contacts.List(ctx, f); err == nil && len(cs) > 0 {
+		pick := cs[0]
+		for _, x := range cs {
+			if x.FirstName != "" {
+				pick = x
+				break
+			}
+		}
+		sample := &core.Contact{ID: pick.ID, Email: pick.Email, FirstName: pick.FirstName, LastName: pick.LastName, Attributes: pick.Attributes, Status: pick.Status}
+		d := content.Draft{Subject: b.Email.Subject, Preheader: b.Email.Preheader, Format: b.Email.Format, Body: b.Email.Body}
+		if out, err := u.d.Content.RenderDraft(ctx, d, sample, nil); err == nil {
+			c.Subject = out.Subject
+			c.SampleName = strings.TrimSpace(pick.FirstName + " " + pick.LastName)
+			if c.SampleName == "" {
+				c.SampleName = pick.Email
+			}
+		}
+	}
+
+	if gaps := content.UnguardedFields(content.Draft{Subject: b.Email.Subject, Preheader: b.Email.Preheader, Body: b.Email.Body}); len(gaps) > 0 {
+		fields, err := u.d.Content.MergeFields(ctx)
+		if err != nil {
+			return nil, err
+		}
+		var total int64
+		have := map[string]int64{}
+		for _, mf := range fields {
+			have[mf.Name] = mf.Contacts
+			if mf.Name == "email" {
+				total = mf.Contacts
+			}
+		}
+		for _, g := range gaps {
+			if missing := total - have[g]; missing > 0 {
+				label := strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(g, "attr."), "_", " "))
+				c.Gaps = append(c.Gaps, mergeGap{Field: g, Label: label, Missing: missing, Total: total})
+			}
+		}
+	}
+	if c.LastTest, c.TestStatus, err = u.d.Content.LastTest(ctx, b.Email.ID, b.Email.Subject); err != nil {
+		return nil, err
+	}
+	c.TestDelivered = c.TestStatus == "sent" || c.TestStatus == "delivered"
+	if c.Recipients == 0 {
+		c.Todo++
+	}
+	if !c.TestDelivered {
+		c.Todo++
+	}
+	c.Todo += len(c.Gaps)
+	c.Ready = c.Todo == 0
+	return c, nil
+}
+
+// confirmFacts are the checklist facts the send and schedule confirmations
+// repeat: the subject as a sample recipient sees it, and every open
+// warning (personalisation gaps, no delivered test).
+func (u *UI) confirmFacts(ctx context.Context, b broadcasts.Broadcast) (subject string, warnings []string, err error) {
+	c, err := u.checklist(ctx, b)
+	if err != nil {
+		return "", nil, err
+	}
+	subject = "Subject: " + c.Subject
+	if c.SampleName != "" {
+		subject += " (as " + c.SampleName + " sees it)"
+	}
+	for _, g := range c.Gaps {
+		warnings = append(warnings, fmt.Sprintf("Warning: %d of %d contacts have no %s, and the email has no fallback for it. They would see a gap, e.g. \"Hi ,\".", g.Missing, g.Total, g.Label))
+	}
+	if !c.TestDelivered {
+		warnings = append(warnings, "Warning: No test of this email has been delivered yet.")
+	}
+	if !u.sesReady() {
+		warnings = append(warnings, "Warning: Email sending isn't connected yet (Amazon SES). Nothing goes out until it is set up; then it starts at once.")
+	}
+	return subject, warnings, nil
 }

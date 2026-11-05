@@ -19,7 +19,7 @@
     </tr></thead>
     <tbody>
     {{range .Items}}<tr>
-      <td><a href="/admin/broadcasts/{{.ID}}"><strong>{{.Name}}</strong></a><br><span class="muted small">{{truncate 80 .Email.Subject}}</span></td>
+      <td><a href="/admin/broadcasts/{{.ID}}"><strong>{{.Name}}</strong></a><br><span class="muted small">{{mergeChips (truncate 80 .Email.Subject)}}</span></td>
       <td>{{badge "broadcast" .Status}}{{if .PausedReason}}<br><span class="muted small">{{template "paused-reason" .PausedReason}}</span>{{end}}</td>
       <td>{{template "audience" .Audience}}</td>
       <td class="nowrap">{{template "broadcast-when" .}}</td>

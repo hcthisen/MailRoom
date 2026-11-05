@@ -63,6 +63,9 @@ services:
       SNS_TOPIC_ARN: ${SNS_TOPIC_ARN:-}
       SES_CONFIGURATION_SET: ${SES_CONFIGURATION_SET:-mailroom}
       BACKUP_BUCKET: ${BACKUP_BUCKET:-}
+      # Receiving email (the Inbox): both set by provision ses, or both empty.
+      INBOUND_BUCKET: ${INBOUND_BUCKET:-}
+      INBOUND_DOMAIN: ${INBOUND_DOMAIN:-}
 
       # --- optional first-start bootstrap (no shell needed) -------------
       # Creates the first admin user and an admin API token named

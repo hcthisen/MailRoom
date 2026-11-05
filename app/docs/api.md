@@ -313,13 +313,20 @@ curl -sS "$MAILROOM/api/v1/segments/$SEG/members?status=active&limit=100" -H "Au
 
 ### 5. Write and preview an email
 
-Emails are Markdown (default) or raw HTML (`"format": "html"`, e.g. copied from GHL). Every email is wrapped in the base layout with the unsubscribe footer when it is sent. Merge fields: `{{first_name}}`, `{{last_name}}`, `{{email}}`, `{{attr.<key>}}` and `{{unsubscribe_url}}`, each with an optional fallback such as `{{first_name | "there"}}`. Any other merge field is a 422.
+Emails are Markdown (default) or raw HTML (`"format": "html"`, e.g. copied from GHL). Every email is wrapped in the base layout with the unsubscribe footer when it is sent. Merge fields: `{{first_name}}`, `{{last_name}}`, `{{email}}`, `{{attr.<key>}}` and `{{unsubscribe_url}}`, each with an optional fallback such as `{{first_name | "there"}}`. Any other merge field is a 422. `GET /api/v1/emails/merge-fields` lists the fields with the attribute keys found on contacts and how many contacts have each one.
+
+HTML bodies that start with `<!-- mailroom:visual -->` were made in the admin UI's visual editor: they get the same inline styles as Markdown output, and a link with `class="mr-button"` is drawn as a button in the layout's brand colour. Other HTML is sent exactly as written.
 
 ```bash
 # Render without saving (live preview; read scope is enough). contact_id fills in a real contact's data
 curl -sS -X POST "$MAILROOM/api/v1/emails/render" \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"subject": "Welcome, {{first_name | \"friend\"}}!", "body": "Hi {{first_name | \"there\"}},\n\nThanks for joining.", "contact_id": 42}'
+
+# Send a test of unsaved content (202): to 1-5 addresses (default: the owner), with a contact's data
+curl -sS -X POST "$MAILROOM/api/v1/emails/test" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -H "Idempotency-Key: test-draft-1" \
+  -d '{"subject": "Welcome!", "body": "Hi {{first_name | \"there\"}}", "to": ["owner@example.com"], "contact_id": 42}'
 
 # Save it (201)
 EID=$(curl -sS -X POST "$MAILROOM/api/v1/emails" \
@@ -665,6 +672,31 @@ curl -sS "$MAILROOM/api/v1/system/backups/mailroom-20261001T023000Z.db" \
 
 A failed backup alerts the owner. Restoring is done offline on the server with `mailroom restore FILE` while the server is stopped (see the kit's deploy/README.md). A restored server starts with all sending paused (`GET /api/v1/sending/state` shows a manual pause whose reason starts with "restored from a backup"): check the contacts, broadcasts and sequences, then `POST /api/v1/sending/resume`. The restore carries unsubscribes, bounces, suppressions, GDPR erasures and already-sent messages over from the database it replaced; without one (a new server) they are lost, and the command warns. The key file `data/secret.key` and `data/media/` belong with the backups.
 
+### 16. Read and answer received email (Inbox)
+
+When receiving is set up (`GET /api/v1/inbound/counts` says `enabled: true`), every email sent to an address on the domain is in the Inbox. `pending` messages were received by SES and are being fetched; `failed` ones could not be fetched (`fetch_error`).
+
+```bash
+# Unread email, newest first (box: inbox, unread, archived or all; q searches subject and sender)
+curl -sS "$MAILROOM/api/v1/inbound?box=unread" -H "Authorization: Bearer $TOKEN"
+
+# One message: text, html (untrusted: show it sandboxed), verdicts, attachment_list, replies_sent
+curl -sS "$MAILROOM/api/v1/inbound/12" -H "Authorization: Bearer $TOKEN"
+curl -sS "$MAILROOM/api/v1/inbound/12/attachments/1" -H "Authorization: Bearer $TOKEN" -o attachment
+
+# Reply (dry run first: where it goes and the subject), then send it: 202 with message_id
+curl -sS -X POST "$MAILROOM/api/v1/inbound/12/reply?dry_run=true" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" -d '{"body": "Hi Anna,\n\nThanks, see you Friday.\n\nBen"}'
+curl -sS -X POST "$MAILROOM/api/v1/inbound/12/reply" -H "Authorization: Bearer $TOKEN" -H "Idempotency-Key: reply-12-1" \
+  -H "Content-Type: application/json" -d '{"body": "Hi Anna,\n\nThanks, see you Friday.\n\nBen"}'
+
+# Mark read, or archive
+curl -sS -X PATCH "$MAILROOM/api/v1/inbound/12" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" -d '{"read": true, "archived": true}'
+```
+
+A reply is a plain personal email from the settings sender (no layout, unsubscribe link or tracking), threaded with the received message and quoting it unless `"quote": false`. It is refused with 409 when the address is suppressed or its contact bounced or complained. Never reply on a person's behalf without being asked to: show the text to a human first.
+
 ## 4. Where things are
 
 | Area | Endpoints (all under `/api/v1`) |
@@ -673,7 +705,7 @@ A failed backup alerts the owner. Restoring is done offline on the server with `
 | Tags | `GET/POST /tags`, `GET/PATCH/DELETE /tags/{id}` (PATCH renames), `POST /tags/{id}/merge`, `POST /tags/bulk` |
 | Suppressions | `GET/POST /suppressions`, `POST /suppressions/remove` (manual suppressions only) |
 | Segments | `GET/POST /segments`, `POST /segments/preview`, `GET/PATCH/DELETE /segments/{id}`, `GET /segments/{id}/count`, `GET /segments/{id}/members` |
-| Emails | `GET/POST /emails`, `POST /emails/render`, `GET/PATCH/DELETE /emails/{id}`, `GET /emails/{id}/usage` (the steps and broadcasts that use it), `POST /emails/{id}/preview`, `POST /emails/{id}/test` |
+| Emails | `GET/POST /emails`, `POST /emails/render`, `POST /emails/test` (test of unsaved content), `GET /emails/merge-fields`, `GET/PATCH/DELETE /emails/{id}`, `GET /emails/{id}/usage` (the steps and broadcasts that use it), `POST /emails/{id}/preview`, `POST /emails/{id}/test` |
 | Layout and media | `GET/PUT /layout`, `POST /layout/preview`, `GET/POST /media`, `GET/DELETE /media/{id}` |
 | Broadcasts | `GET/POST /broadcasts`, `GET/PATCH/DELETE /broadcasts/{id}`, `POST /broadcasts/{id}/test`, `POST /broadcasts/{id}/send`, `POST /broadcasts/{id}/schedule`, `POST /broadcasts/{id}/unschedule`, `POST /broadcasts/{id}/pause`, `POST /broadcasts/{id}/resume`, `POST /broadcasts/{id}/cancel`, `POST /broadcasts/{id}/duplicate`, `GET /broadcasts/{id}/stats`, `GET /broadcasts/{id}/recipients` |
 | Sequences | `GET/POST /sequences`, `POST /sequences/import`, `GET/PATCH/DELETE /sequences/{id}`, `GET /sequences/{id}/export`, `GET /sequences/{id}/stats`, `POST /sequences/{id}/pause`, `POST /sequences/{id}/resume` |
@@ -688,8 +720,9 @@ A failed backup alerts the owner. Restoring is done offline on the server with `
 | API tokens | `GET/POST /tokens`, `GET/DELETE /tokens/{id}` |
 | System | `GET /system/health`, `GET /system/version`, `GET /system/doctor`, `GET /system/ses`, `GET/POST /system/backups`, `GET /system/backups/{name}`, `GET /stats/dashboard` |
 | Jobs and audit | `GET /jobs`, `GET /jobs/{id}`, `GET /audit` |
+| Inbox (received email) | `GET /inbound`, `GET /inbound/counts`, `GET/PATCH/DELETE /inbound/{id}`, `GET /inbound/{id}/attachments/{position}`, `POST /inbound/{id}/reply` |
 
-Public endpoints outside the API (no token): `/f/{public_id}` (forms), `/u/...` (unsubscribe), `/c/...` (click redirects), `/o/...` (open pixel), `/hooks/ses` (SES notifications through SNS) and `/healthz`.
+Public endpoints outside the API (no token): `/f/{public_id}` (forms), `/u/...` (unsubscribe), `/c/...` (click redirects), `/o/...` (open pixel), `/hooks/ses` (SES notifications through SNS, including received mail) and `/healthz`.
 
 ## 5. Rules of thumb for agents
 

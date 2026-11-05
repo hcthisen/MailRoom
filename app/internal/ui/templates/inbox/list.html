@@ -1,0 +1,40 @@
+{{/* The inbox: received email, newest first. .Data is ui.inboxListData. */}}
+{{define "content"}}{{with .Data}}
+{{if .Disabled}}<div class="flash flash-info" role="status"><div><strong>Receiving email isn&#39;t switched on.</strong> Emails people send to your domain will show up here once it is set up. If your domain already has a mailbox elsewhere (Google, Outlook), it stays there and this inbox stays empty. <details class="mt-2"><summary class="small">Technical details</summary><span class="small">The setup (<code>mailroom provision ses</code>) creates the receiving rule in Amazon SES and asks for an MX record that points the domain to it. It skips this when the domain already has other MX records.</span></details></div></div>{{end}}
+{{with .Counts.Failed}}<div class="flash flash-warning" role="status"><p>{{plural . "email" "emails"}} could not be fetched from Amazon S3. They are listed under <a href="/admin/inbox?box=all">All</a>; open one to see why.</p></div>{{end}}
+
+{{template "subnav" (dict "Label" "Inbox folders" "Items" .Tabs)}}
+
+<form class="filters" method="get" action="/admin/inbox" role="search" aria-label="Search email">
+  <input type="hidden" name="box" value="{{.Box}}">
+  <div class="field grow">
+    <label for="f-q">Search</label>
+    <input id="f-q" name="q" type="search" value="{{.Query}}" placeholder="Subject, sender name or address" autocomplete="off">
+  </div>
+  <div class="field"><button class="btn" type="submit">Search</button>{{if .Query}} <a class="btn btn-ghost" href="/admin/inbox?box={{.Box}}">Clear</a>{{end}}</div>
+</form>
+
+{{if .Items}}
+<div class="table-wrap"><table class="table">
+  <thead><tr><th scope="col">From</th><th scope="col">Subject</th><th scope="col">Received</th></tr></thead>
+  <tbody>{{range .Items}}<tr{{if not .Read}} class="is-unread"{{end}}>
+    <td>{{if not .Read}}<strong>{{end}}{{or .FromName .FromEmail}}{{if not .Read}}</strong>{{end}}
+      {{if .FromName}}<br><span class="muted small">{{.FromEmail}}</span>{{end}}
+      {{with .ContactID}}<br><a class="small" href="/admin/contacts/{{.}}">Contact</a>{{end}}</td>
+    <td><a href="/admin/inbox/{{.ID}}">{{if not .Read}}<strong>{{end}}{{or .Subject "(no subject)"}}{{if not .Read}}</strong>{{end}}</a>
+      {{if not .Read}} {{badge "" "new"}}{{end}}{{if .Spam}} {{badge "" "spam"}}{{end}}{{if ne .Status "received"}} {{badge "" .Status}}{{end}}{{if .Replies}} {{badge "" "replied"}}{{end}}{{if .Attachments}} <span class="muted small">📎 {{.Attachments}}</span>{{end}}
+      {{with .Snippet}}<br><span class="muted small">{{truncate 140 .}}</span>{{end}}</td>
+    <td class="nowrap">{{fmtTime .ReceivedAt}}<br><span class="muted small">{{ago .ReceivedAt}}</span></td>
+  </tr>{{end}}</tbody>
+</table></div>
+{{template "pager" .Pager}}
+{{else if .Query}}
+{{template "empty" (dict "Title" "Nothing found" "Text" "No email matches your search in this folder.")}}
+{{else if eq .Box "archived"}}
+{{template "empty" (dict "Title" "The archive is empty" "Text" "Archived email lands here.")}}
+{{else if eq .Box "unread"}}
+{{template "empty" (dict "Title" "All read" "Text" "There is no unread email.")}}
+{{else}}
+{{template "empty" (dict "Title" "No email yet" "Text" (printf "Email sent to any address on %s shows up here, for example replies to your newsletters." (or .Domain "your domain")))}}
+{{end}}
+{{end}}{{end}}

@@ -1,3 +1,7 @@
+{{define "actions"}}<a class="btn" href="/admin/imports">Import contacts</a>
+<a class="btn" href="/admin/forms/new">New form</a>
+<a class="btn btn-primary" href="/admin/broadcasts/new">{{template "icon" "plus"}} New broadcast</a>{{end}}
+
 {{define "content"}}{{with .Data}}
 {{if .Sending.Paused}}<div class="flash flash-warning" role="status"><p><strong>Sending is paused</strong>{{with .Sending.Reason}}: {{.}}{{end}}{{with .Sending.Since}} (since {{fmtTime .}}){{end}}. Nothing is sent until it is resumed on the <a href="/admin/health">Health</a> page.</p></div>{{end}}
 {{with .SendingErr}}<div class="flash flash-error" role="alert"><p>{{.}}</p></div>{{end}}
@@ -15,6 +19,14 @@
   </div>
 </section>
 {{end}}{{end}}
+
+<section class="card mb-5" aria-labelledby="recent-title">
+  <div class="card-header"><h2 id="recent-title">Recent broadcasts</h2><div class="actions"><a class="btn btn-sm" href="/admin/broadcasts">All broadcasts</a></div></div>
+  {{with .RecentErr}}<p class="muted">{{.}}</p>{{else}}{{if .Recent}}<div class="table-wrap flat"><table class="table">
+    <thead><tr><th>Name</th><th>Status</th><th>When</th><th class="num">Recipients</th></tr></thead>
+    <tbody>{{range .Recent}}<tr><td><a href="/admin/broadcasts/{{.ID}}">{{.Name}}</a></td><td>{{badge "broadcast" .Status}}</td><td class="small">{{if .FinishedAt}}{{fmtTime .FinishedAt}}{{else if .StartedAt}}Started {{fmtTime .StartedAt}}{{else if .ScheduledAt}}Scheduled {{fmtTime .ScheduledAt}}{{else}}<span class="muted">Draft, {{fmtDate .CreatedAt}}</span>{{end}}</td><td class="num">{{if .RecipientsTotal}}{{num .RecipientsTotal}}{{else}}<span class="muted">–</span>{{end}}</td></tr>{{end}}</tbody>
+  </table></div>{{else}}<p class="muted">No broadcasts yet. <a href="/admin/broadcasts/new">Write your first newsletter</a>.</p>{{end}}{{end}}
+</section>
 
 <div class="grid grid-2">
   <section class="card" aria-labelledby="ses-title">
@@ -36,12 +48,15 @@
   </section>
 
   <section class="card" aria-labelledby="warnings-title">
-    <div class="card-header"><h2 id="warnings-title">Warnings</h2><div class="actions"><a class="btn btn-sm" href="/admin/health">Health</a></div></div>
+    <div class="card-header"><h2 id="warnings-title">Setup and health</h2><div class="actions"><a class="btn btn-sm" href="/admin/health">Details</a></div></div>
     {{with .Doctor}}
       {{with $.Data.Warnings}}
+        <p>{{badge "" "warn"}} <strong>{{plural (len .) "thing needs" "things need"}} attention.</strong> If you didn't install Mailroom yourself, send this to whoever did.</p>
+        <ul class="plain-list warn-list">{{range .}}<li>{{badge "" (printf "%s" .Status)}} {{checkLabel .Name}}</li>{{end}}</ul>
+        <details class="mt-3"><summary class="small">Technical details</summary>
         <ul class="checks">
-          {{range .}}<li><span>{{badge "" (printf "%s" .Status)}}</span><div><span class="name">{{.Name}}</span><p class="small">{{.Message}}</p>{{with .FixHint}}<p class="fix">Fix: {{.}}</p>{{end}}</div></li>{{end}}
-        </ul>
+          {{range .}}<li><span>{{badge "" (printf "%s" .Status)}}</span><div><span class="name">{{checkLabel .Name}}</span> <code class="muted small">{{.Name}}</code><p class="small">{{.Message}}</p>{{with .FixHint}}<p class="fix">Fix: {{.}}</p>{{end}}</div></li>{{end}}
+        </ul></details>
       {{else}}
         <p>{{badge "" "ok"}} All checks passed.</p>
       {{end}}

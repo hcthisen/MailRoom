@@ -35,7 +35,7 @@ const autoPartsSrc = `
 <hr>{{end}}
 
 {{define "seq-summary"}}<dl class="props">
-  <dt>Status</dt><dd>{{badge "" .Seq.Status}}{{if eq .Seq.Status "paused"}} <span class="muted small">nothing is sent until it is resumed</span>{{end}}</dd>
+  <dt>Status</dt><dd>{{if eq .Seq.Status "paused"}}<span class="onoff is-off">Off</span> <span class="muted small">nothing is sent until it is switched on</span>{{else}}<span class="onoff is-on">On</span>{{end}}</dd>
   <dt>Trigger</dt><dd>{{with .Seq.TriggerTag}}Adding the tag <span class="tag">{{.}}</span> to an active contact{{else}}<span class="muted">No tag trigger: forms, imports and manual enrolment only</span>{{end}}</dd>
   <dt>Exit tags</dt><dd>{{range .Seq.ExitTags}}<span class="tag">{{.}}</span>{{else}}<span class="muted">None</span>{{end}}</dd>
   <dt>Tag on exit</dt><dd>{{with .Seq.ExitAddTag}}<span class="tag">{{.}}</span>{{else}}<span class="muted">None</span>{{end}}</dd>

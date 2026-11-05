@@ -39,12 +39,15 @@ const (
 	KindOptin     MessageKind = "optin"
 	KindTest      MessageKind = "test"
 	KindAlert     MessageKind = "alert"
+	// KindReply is a personal reply from the inbox to a received email
+	// (N-5): no layout, no unsubscribe link, no tracking.
+	KindReply MessageKind = "reply"
 )
 
 // Valid reports whether k is one of the defined message kinds.
 func (k MessageKind) Valid() bool {
 	switch k {
-	case KindBroadcast, KindSequence, KindOptin, KindTest, KindAlert:
+	case KindBroadcast, KindSequence, KindOptin, KindTest, KindAlert, KindReply:
 		return true
 	}
 	return false
@@ -106,7 +109,10 @@ func IsMarketingKind(kind MessageKind) bool {
 //     suppressions table), and only active and pending contacts pass, so a
 //     test never reaches an unsubscribed, bounced, complained or manually
 //     suppressed contact (PRD goal 3);
-//   - alert messages are never suppressed.
+//   - alert messages are never suppressed;
+//   - reply messages (an answer to an email the address sent us) go to
+//     any address except one whose contact bounced or complained; the
+//     suppressions table still blocks manually suppressed addresses.
 //
 // CanReceive does not consult the suppressions table; the sender does that
 // separately for every kind except alert.
@@ -120,6 +126,8 @@ func CanReceive(status ContactStatus, kind MessageKind) bool {
 		return status == StatusActive || status == StatusPending
 	case KindAlert:
 		return true
+	case KindReply:
+		return status != StatusBounced && status != StatusComplained
 	}
 	return false
 }

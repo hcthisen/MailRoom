@@ -63,6 +63,14 @@ func TestRetention(t *testing.T) {
 	for _, at := range []time.Time{now.Add(-32 * day), now.Add(-30 * day)} {
 		testutil.Exec(t, f.d, `INSERT INTO confirmation_emails (email_hash, form_id, kind, queued_at) VALUES ('h', 1, 'optin', ?)`, db.FormatTime(at))
 	}
+	for i, row := range []struct {
+		status string
+		at     time.Time
+	}{{"received", now.Add(-366 * day)}, {"received", now.Add(-300 * day)}, {"failed", now.Add(-31 * day)}, {"failed", now.Add(-29 * day)}} {
+		at := db.FormatTime(row.at)
+		testutil.Exec(t, f.d, `INSERT INTO inbound_messages (s3_key, status, received_at, next_attempt_at, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?)`, fmt.Sprintf("inbound/%d", i), row.status, at, at, at, at)
+	}
 
 	res, err := f.service().Retention(f.ctx)
 	if err != nil {
@@ -71,7 +79,10 @@ func TestRetention(t *testing.T) {
 	if n := testutil.Count(t, f.d.Read, `SELECT count(*) FROM confirmation_emails`); n != 1 {
 		t.Fatalf("confirmation log rows = %d, want the recent one", n)
 	}
-	if res != (RetentionResult{EventDetailsCleared: 1, JobsDeleted: 2, SessionsDeleted: 1, ConfirmationsPurged: 1}) {
+	if n := testutil.Count(t, f.d.Read, `SELECT count(*) FROM inbound_messages`); n != 2 {
+		t.Fatalf("received email rows = %d, want the recent two", n)
+	}
+	if res != (RetentionResult{EventDetailsCleared: 1, JobsDeleted: 2, SessionsDeleted: 1, ConfirmationsPurged: 1, InboundDeleted: 2}) {
 		t.Fatalf("result = %+v", res)
 	}
 	detail := func(id int64) string {

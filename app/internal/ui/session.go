@@ -95,7 +95,9 @@ func (u *UI) base(a Action, h HandlerFunc) http.Handler {
 // app.js: no inline scripts, no eval). Inline styles and https images are
 // allowed because email previews (srcdoc iframes, which inherit this
 // policy) are full of them; the iframes are sandboxed without
-// allow-scripts, so an email can never run code.
+// allow-scripts, so an email can never run code. Previews of the install's
+// own content add allow-same-origin only so editor.js can size them to
+// their content; received (inbox) mail keeps the empty sandbox.
 func setSecurityHeaders(h http.Header) {
 	h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "+
 		"img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-src 'self'; "+

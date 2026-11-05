@@ -307,4 +307,56 @@ func (s *Service) registerEmails(a *api.API) {
 		}
 		return out, nil
 	})
+
+	api.Register(a, huma.Operation{
+		OperationID: "send-test-draft", Method: http.MethodPost, Path: "/emails/test", Tags: tags, DefaultStatus: http.StatusAccepted,
+		MaxBodyBytes: maxJSONBodyBytes,
+		Summary:      "Send a test of unsaved content",
+		Description: "Queues a test send of subject, preheader and body that don't have to be saved (the editor's Send test button), to 1-5 addresses or the owner's address. " +
+			"The content is validated like on save. With contact_id the merge fields use that contact's data; from_name and reply_to override the settings' sender like a broadcast's. Otherwise like send-test-email.",
+	}, func(ctx context.Context, in *testDraftInput) (*testEmailOutput, error) {
+		b := in.Body
+		out := &testEmailOutput{}
+		err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
+			var err error
+			out.Body.MessageIDs, out.Body.To, err = s.SendTestDraft(ctx, tx,
+				Draft{Subject: b.Subject, Preheader: b.Preheader, Format: b.Format, Body: b.Body},
+				b.To, b.ContactID, SenderOverride{FromName: b.FromName, ReplyTo: b.ReplyTo})
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
+	})
+
+	api.Register(a, huma.Operation{
+		OperationID: "list-merge-fields", Method: http.MethodGet, Path: "/emails/merge-fields", Tags: tags,
+		Summary:     "List merge fields",
+		Description: "Lists the merge fields an email can use: first_name, last_name, email, every attribute key found on contacts (attr.<key>, most used first, at most 200) and unsubscribe_url, with how many contacts have a value and an example value.",
+	}, func(ctx context.Context, _ *struct{}) (*mergeFieldsOutput, error) {
+		fs, err := s.MergeFields(ctx)
+		if err != nil {
+			return nil, err
+		}
+		out := &mergeFieldsOutput{}
+		out.Body.Items = fs
+		return out, nil
+	})
+}
+
+type testDraftInput struct {
+	Body struct {
+		EmailBody
+		To        []string `json:"to,omitempty" maxItems:"5" doc:"1-5 addresses; omit to send to the owner's address from the settings" example:"[\"owner@example.org\"]"`
+		ContactID int64    `json:"contact_id,omitempty" minimum:"0" doc:"Fill merge fields with this contact's data; omit to use the fallbacks" example:"42"`
+		FromName  *string  `json:"from_name,omitempty" maxLength:"200" doc:"From name instead of the settings' one" example:"Anna from Example"`
+		ReplyTo   *string  `json:"reply_to,omitempty" maxLength:"254" doc:"Reply-To instead of the settings' one; \"\" for none. Must be on the sending domain" example:"hello@example.com"`
+	}
+}
+
+type mergeFieldsOutput struct {
+	Body struct {
+		Items []MergeField `json:"items"`
+	}
 }

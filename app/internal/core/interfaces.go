@@ -11,7 +11,30 @@ const (
 	TemplateOptinConfirm       = "optin_confirm"
 	TemplateResubscribeConfirm = "resubscribe_confirm"
 	TemplateAlert              = "alert"
+	// TemplateReply renders a reply from the inbox (kind reply): data
+	// subject, body (plain text) and optionally quote_header and quote.
+	TemplateReply = "reply"
 )
+
+// Data keys of reply messages (kind reply), written by inbound and read by
+// content (rendering) and sending (threading headers).
+const (
+	DataReplySubject    = "subject"
+	DataReplyBody       = "body"
+	DataReplyQuote      = "quote"        // the quoted original, plain text
+	DataReplyQuoteHead  = "quote_header" // "On <date>, <sender> wrote:"
+	DataReplyInReplyTo  = "in_reply_to"  // Message-ID of the received mail, without <>
+	DataReplyReferences = "references"   // References of the received mail plus its Message-ID
+)
+
+// InboundReceiver records SES "Received" notifications (N-1). Implemented
+// by inbound, used by events (the SNS webhook): Received runs inside the
+// webhook's transaction and does no network I/O; the message itself is
+// fetched later by inbound's worker. A malformed notification returns an
+// error wrapping ErrValidation.
+type InboundReceiver interface {
+	Received(ctx context.Context, tx *sql.Tx, snsMessageID, message string) error
+}
 
 // Renderer turns a message into its final subject, HTML and text. It is
 // implemented by content and used by sending (at send time) and previews.

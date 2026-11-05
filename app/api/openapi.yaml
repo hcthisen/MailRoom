@@ -132,6 +132,43 @@ components:
       required:
         - tags
       type: object
+    Attachment:
+      additionalProperties: false
+      properties:
+        content_id:
+          description: "For inline images referenced as cid: in the HTML"
+          examples:
+            - ""
+          type: string
+        content_type:
+          examples:
+            - application/pdf
+          type: string
+        filename:
+          examples:
+            - invoice.pdf
+          type: string
+        inline:
+          type: boolean
+        position:
+          description: 1-based; use it to download the attachment
+          examples:
+            - 1
+          format: int64
+          type: integer
+        size_bytes:
+          examples:
+            - 48213
+          format: int64
+          type: integer
+      required:
+        - position
+        - filename
+        - content_type
+        - content_id
+        - inline
+        - size_bytes
+      type: object
     BackupInfo:
       additionalProperties: false
       properties:
@@ -1116,6 +1153,49 @@ components:
         - updated_at
         - version
       type: object
+    Counts:
+      additionalProperties: false
+      properties:
+        domain:
+          description: The domain whose mail Mailroom receives
+          examples:
+            - example.com
+          type: string
+        enabled:
+          description: Receiving is set up (INBOUND_BUCKET and INBOUND_DOMAIN)
+          type: boolean
+        failed:
+          description: Messages that could not be fetched
+          examples:
+            - 0
+          format: int64
+          type: integer
+        inbox:
+          description: Messages in the inbox (not archived)
+          examples:
+            - 17
+          format: int64
+          type: integer
+        pending:
+          description: Messages received by SES but not fetched yet
+          examples:
+            - 0
+          format: int64
+          type: integer
+        unread:
+          description: Unread messages in the inbox (not archived)
+          examples:
+            - 3
+          format: int64
+          type: integer
+      required:
+        - enabled
+        - domain
+        - unread
+        - inbox
+        - pending
+        - failed
+      type: object
     CreateContactInputBody:
       additionalProperties: false
       properties:
@@ -1901,6 +1981,12 @@ components:
             - 1
           format: int64
           type: integer
+        inbound_messages:
+          description: Email received from the contact or its address (the Inbox), with attachments
+          examples:
+            - 2
+          format: int64
+          type: integer
         pending_optins:
           examples:
             - 0
@@ -1930,6 +2016,7 @@ components:
         - status_changes
         - enrollments
         - pending_optins
+        - inbound_messages
         - stored_responses
       type: object
     EraseResult:
@@ -2099,6 +2186,13 @@ components:
           type:
             - array
             - "null"
+        received:
+          description: Email received from the contact or its address (the Inbox); attachments are listed, not included
+          items:
+            $ref: "#/components/schemas/ExportReceived"
+          type:
+            - array
+            - "null"
         status_history:
           items:
             $ref: "#/components/schemas/StatusRecord"
@@ -2124,6 +2218,7 @@ components:
         - enrollments
         - pending_optins
         - form_submissions
+        - received
       type: object
     ExportClick:
       additionalProperties: false
@@ -2248,6 +2343,39 @@ components:
         - consent_text
         - created_at
         - expires_at
+      type: object
+    ExportReceived:
+      additionalProperties: false
+      properties:
+        attachments:
+          description: File names
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        from_email:
+          type: string
+        from_name:
+          type: string
+        id:
+          format: int64
+          type: integer
+        received_at:
+          format: date-time
+          type: string
+        subject:
+          type: string
+        text:
+          type: string
+      required:
+        - id
+        - from_email
+        - from_name
+        - subject
+        - received_at
+        - text
+        - attachments
       type: object
     ExportSubmission:
       additionalProperties: false
@@ -2797,6 +2925,174 @@ components:
       required:
         - yaml
       type: object
+    InboundMessage:
+      additionalProperties: false
+      properties:
+        archived:
+          type: boolean
+        attachment_list:
+          items:
+            $ref: "#/components/schemas/Attachment"
+          type:
+            - array
+            - "null"
+        attachments:
+          description: Number of attachments
+          examples:
+            - 1
+          format: int64
+          type: integer
+        cc:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        contact_id:
+          description: The contact with the sender's address, when there is one
+          examples:
+            - 42
+          format: int64
+          type:
+            - integer
+            - "null"
+        fetch_error:
+          type: string
+        from_email:
+          examples:
+            - anna@example.org
+          type: string
+        from_name:
+          examples:
+            - Anna Jensen
+          type: string
+        html:
+          description: "The HTML body as received (untrusted: show it sandboxed)"
+          type: string
+        id:
+          examples:
+            - 12
+          format: int64
+          type: integer
+        in_reply_to:
+          description: "The In-Reply-To header: the Message-ID it answers"
+          type: string
+        in_reply_to_message_id:
+          description: The Mailroom message (messages row) this mail answers, when its In-Reply-To is one of ours
+          examples:
+            - 377
+          format: int64
+          type:
+            - integer
+            - "null"
+        message_id_header:
+          description: The Message-ID header (without <>)
+          type: string
+        read:
+          type: boolean
+        read_at:
+          format: date-time
+          type:
+            - string
+            - "null"
+        received_at:
+          format: date-time
+          type: string
+        replies:
+          description: Number of replies sent from Mailroom
+          examples:
+            - 0
+          format: int64
+          type: integer
+        replies_sent:
+          items:
+            $ref: "#/components/schemas/Reply"
+          type:
+            - array
+            - "null"
+        reply_to:
+          description: The Reply-To address, when the sender set one; replies go there
+          type: string
+        sent_date:
+          description: The Date header
+          format: date-time
+          type:
+            - string
+            - "null"
+        size_bytes:
+          format: int64
+          type: integer
+        snippet:
+          description: The start of the text, without quoted lines
+          examples:
+            - Thanks, that sounds great!
+          type: string
+        spam:
+          description: SES's spam or virus scan failed
+          type: boolean
+        status:
+          description: "pending: received by SES, not fetched yet; failed: it could not be fetched (fetch_error)"
+          enum:
+            - pending
+            - received
+            - failed
+          examples:
+            - received
+          type: string
+        subject:
+          examples:
+            - "Re: April news"
+          type: string
+        text:
+          description: The plain-text body (from the HTML when the message has no text part)
+          type: string
+        to:
+          description: The To addresses as sent
+          examples:
+            - - hello@example.com
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        verdicts:
+          $ref: "#/components/schemas/Verdicts"
+        version:
+          examples:
+            - 2
+          format: int64
+          type: integer
+      required:
+        - cc
+        - reply_to
+        - message_id_header
+        - in_reply_to
+        - sent_date
+        - text
+        - html
+        - size_bytes
+        - verdicts
+        - fetch_error
+        - attachment_list
+        - replies_sent
+        - in_reply_to_message_id
+        - id
+        - status
+        - from_email
+        - from_name
+        - to
+        - subject
+        - snippet
+        - received_at
+        - contact_id
+        - read
+        - read_at
+        - archived
+        - attachments
+        - replies
+        - spam
+        - version
+      type: object
     Job:
       additionalProperties: false
       properties:
@@ -3215,6 +3511,23 @@ components:
         - items
         - next_cursor
       type: object
+    ListBodySummary:
+      additionalProperties: false
+      properties:
+        items:
+          description: The items of this page
+          items:
+            $ref: "#/components/schemas/Summary"
+          type:
+            - array
+            - "null"
+        next_cursor:
+          description: Cursor for the next page; empty on the last page
+          type: string
+      required:
+        - items
+        - next_cursor
+      type: object
     ListBodySuppression:
       additionalProperties: false
       properties:
@@ -3374,6 +3687,53 @@ components:
         - size_bytes
         - url
         - created_at
+      type: object
+    MergeField:
+      additionalProperties: false
+      properties:
+        contacts:
+          description: How many contacts have a value for it (0 for unsubscribe_url)
+          examples:
+            - 812
+          format: int64
+          type: integer
+        example:
+          description: A value from one contact, to show what it looks like
+          examples:
+            - Anna
+          type: string
+        label:
+          description: A human label
+          examples:
+            - First name
+          type: string
+        name:
+          description: The field name
+          examples:
+            - first_name
+          type: string
+        tag:
+          description: What to insert, e.g. {{first_name}}
+          examples:
+            - "{{first_name}}"
+          type: string
+      required:
+        - tag
+        - name
+        - label
+        - contacts
+      type: object
+    MergeFieldsOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/MergeField"
+          type:
+            - array
+            - "null"
+      required:
+        - items
       type: object
     MergeResult:
       additionalProperties: false
@@ -3932,6 +4292,116 @@ components:
             - "null"
       required:
         - step_ids
+      type: object
+    Reply:
+      additionalProperties: false
+      properties:
+        actor:
+          description: Who wrote it
+          examples:
+            - user:1
+          type: string
+        body:
+          description: The text written
+          type: string
+        message_id:
+          description: The messages row (GET /messages/{id})
+          examples:
+            - 901
+          format: int64
+          type: integer
+        queued_at:
+          format: date-time
+          type: string
+        sent_at:
+          format: date-time
+          type:
+            - string
+            - "null"
+        status:
+          description: "The message status: queued, sent, delivered, bounced, failed, skipped, ..."
+          examples:
+            - sent
+          type: string
+        subject:
+          examples:
+            - "Re: April news"
+          type: string
+        to:
+          examples:
+            - anna@example.org
+          type: string
+      required:
+        - message_id
+        - to
+        - subject
+        - body
+        - status
+        - queued_at
+        - sent_at
+        - actor
+      type: object
+    ReplyInput:
+      additionalProperties: false
+      properties:
+        body:
+          description: The reply, as plain text
+          examples:
+            - |-
+              Hi Anna,
+
+              Thanks for your note. See you Friday!
+
+              Best, Ben
+          maxLength: 50000
+          minLength: 1
+          type: string
+        quote:
+          description: Quote the received text below the reply (default true)
+          type: boolean
+        subject:
+          description: "Default: \"Re: \" and the received subject"
+          examples:
+            - "Re: April news"
+          maxLength: 998
+          type: string
+      required:
+        - body
+      type: object
+    ReplyResult:
+      additionalProperties: false
+      properties:
+        from:
+          description: The From address (the settings sender)
+          examples:
+            - news@example.com
+          type: string
+        from_name:
+          description: The From name (the settings sender)
+          examples:
+            - Example Co
+          type: string
+        message_id:
+          description: The queued messages row; 0 in a dry run
+          examples:
+            - 901
+          format: int64
+          type: integer
+        subject:
+          examples:
+            - "Re: April news"
+          type: string
+        to:
+          description: "Where the reply goes: the Reply-To of the received message, else its sender"
+          examples:
+            - anna@example.org
+          type: string
+      required:
+        - message_id
+        - to
+        - subject
+        - from_name
+        - from
       type: object
     Report:
       additionalProperties: false
@@ -5236,6 +5706,107 @@ components:
         - email
         - created_at
       type: object
+    Summary:
+      additionalProperties: false
+      properties:
+        archived:
+          type: boolean
+        attachments:
+          description: Number of attachments
+          examples:
+            - 1
+          format: int64
+          type: integer
+        contact_id:
+          description: The contact with the sender's address, when there is one
+          examples:
+            - 42
+          format: int64
+          type:
+            - integer
+            - "null"
+        from_email:
+          examples:
+            - anna@example.org
+          type: string
+        from_name:
+          examples:
+            - Anna Jensen
+          type: string
+        id:
+          examples:
+            - 12
+          format: int64
+          type: integer
+        read:
+          type: boolean
+        read_at:
+          format: date-time
+          type:
+            - string
+            - "null"
+        received_at:
+          format: date-time
+          type: string
+        replies:
+          description: Number of replies sent from Mailroom
+          examples:
+            - 0
+          format: int64
+          type: integer
+        snippet:
+          description: The start of the text, without quoted lines
+          examples:
+            - Thanks, that sounds great!
+          type: string
+        spam:
+          description: SES's spam or virus scan failed
+          type: boolean
+        status:
+          description: "pending: received by SES, not fetched yet; failed: it could not be fetched (fetch_error)"
+          enum:
+            - pending
+            - received
+            - failed
+          examples:
+            - received
+          type: string
+        subject:
+          examples:
+            - "Re: April news"
+          type: string
+        to:
+          description: The To addresses as sent
+          examples:
+            - - hello@example.com
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        version:
+          examples:
+            - 2
+          format: int64
+          type: integer
+      required:
+        - id
+        - status
+        - from_email
+        - from_name
+        - to
+        - subject
+        - snippet
+        - received_at
+        - contact_id
+        - read
+        - read_at
+        - archived
+        - attachments
+        - replies
+        - spam
+        - version
+      type: object
     SuppressResult:
       additionalProperties: false
       properties:
@@ -5356,6 +5927,76 @@ components:
         - contacts
         - created_at
       type: object
+    TestDraftInputBody:
+      additionalProperties: false
+      properties:
+        body:
+          description: "The content, at most 1 MiB. Merge fields: {{first_name}}, {{last_name}}, {{email}}, {{attr.<key>}}, {{unsubscribe_url}}, each with an optional fallback like {{first_name | \"there\"}}"
+          examples:
+            - |-
+              Hi {{first_name | "there"}},
+
+              Thanks for joining.
+          type: string
+        contact_id:
+          description: Fill merge fields with this contact's data; omit to use the fallbacks
+          examples:
+            - 42
+          format: int64
+          minimum: 0
+          type: integer
+        format:
+          description: markdown (default) or html (raw HTML, e.g. copied from GHL)
+          enum:
+            - markdown
+            - html
+          examples:
+            - markdown
+          type: string
+        from_name:
+          description: From name instead of the settings' one
+          examples:
+            - Anna from Example
+          maxLength: 200
+          type: string
+        name:
+          description: Internal name, shown in lists
+          examples:
+            - Welcome 1
+          maxLength: 200
+          type: string
+        preheader:
+          description: Preview text shown after the subject in the inbox
+          examples:
+            - Here is what happens next
+          maxLength: 300
+          type: string
+        reply_to:
+          description: Reply-To instead of the settings' one; "" for none. Must be on the sending domain
+          examples:
+            - hello@example.com
+          maxLength: 254
+          type: string
+        subject:
+          description: Subject line (required); may use merge fields
+          examples:
+            - Welcome, {{first_name | "friend"}}!
+          maxLength: 300
+          type: string
+        to:
+          description: 1-5 addresses; omit to send to the owner's address from the settings
+          examples:
+            - - owner@example.org
+          items:
+            type: string
+          maxItems: 5
+          type:
+            - array
+            - "null"
+      required:
+        - subject
+        - body
+      type: object
     TestEmailInputBody:
       additionalProperties: false
       properties:
@@ -5464,7 +6105,7 @@ components:
             - "Broadcast email sent: April news"
           type: string
         type:
-          description: consent, status_change, tag_added, message, click, or a message event type (delivery, bounce, complaint, reject, unsubscribe, send_error)
+          description: consent, status_change, tag_added, message, click, received (an email from the contact, in the Inbox), or a message event type (delivery, bounce, complaint, reject, unsubscribe, send_error)
           examples:
             - message
           type: string
@@ -5589,6 +6230,20 @@ components:
       required:
         - email_hash
         - status_changed
+      type: object
+    Update:
+      additionalProperties: false
+      properties:
+        archived:
+          description: Move to the archive (true) or back to the inbox (false)
+          examples:
+            - false
+          type: boolean
+        read:
+          description: Mark as read (true) or unread (false)
+          examples:
+            - true
+          type: boolean
       type: object
     UpdateContactInputBody:
       additionalProperties: false
@@ -5867,6 +6522,38 @@ components:
         - version
         - created_at
         - updated_at
+      type: object
+    Verdicts:
+      additionalProperties: false
+      properties:
+        dkim:
+          examples:
+            - PASS
+          type: string
+        dmarc:
+          examples:
+            - PASS
+          type: string
+        spam:
+          description: "SES spam scan: PASS, FAIL, GRAY, PROCESSING_FAILED or DISABLED"
+          examples:
+            - PASS
+          type: string
+        spf:
+          examples:
+            - PASS
+          type: string
+        virus:
+          description: SES virus scan, as spam
+          examples:
+            - PASS
+          type: string
+      required:
+        - spam
+        - virus
+        - spf
+        - dkim
+        - dmarc
       type: object
     VersionInfo:
       additionalProperties: false
@@ -8534,6 +9221,50 @@ paths:
       tags:
         - Emails
       x-mailroom-scope: admin
+  /emails/merge-fields:
+    get:
+      description: |-
+        Lists the merge fields an email can use: first_name, last_name, email, every attribute key found on contacts (attr.<key>, most used first, at most 200) and unsubscribe_url, with how many contacts have a value and an example value.
+
+        Needs an API token with scope `read` or `admin`.
+      operationId: list-merge-fields
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MergeFieldsOutputBody"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Forbidden
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List merge fields
+      tags:
+        - Emails
+      x-mailroom-scope: read
   /emails/render:
     post:
       description: |-
@@ -8590,6 +9321,62 @@ paths:
       tags:
         - Emails
       x-mailroom-scope: read
+  /emails/test:
+    post:
+      description: |-
+        Queues a test send of subject, preheader and body that don't have to be saved (the editor's Send test button), to 1-5 addresses or the owner's address. The content is validated like on save. With contact_id the merge fields use that contact's data; from_name and reply_to override the settings' sender like a broadcast's. Otherwise like send-test-email.
+
+        Needs an API token with scope `admin`.
+      operationId: send-test-draft
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestDraftInputBody"
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestEmailOutputBody"
+          description: Accepted
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Send a test of unsaved content
+      tags:
+        - Emails
+      x-mailroom-scope: admin
   /emails/{id}:
     delete:
       description: |-
@@ -9948,6 +10735,524 @@ paths:
       tags:
         - Imports
       x-mailroom-scope: read
+  /inbound:
+    get:
+      description: |-
+        Returns the email received for the inbound domain, newest first, without bodies (N-3). `box` selects the inbox (not archived, the default), unread, archived or all. Filter by `contact_id` or search with `q`. Messages with status pending were received by SES but not fetched yet; failed ones could not be fetched (see get-inbound's fetch_error). The cursor pages backwards: pass next_cursor to get older messages.
+
+        Needs an API token with scope `read` or `admin`.
+      operationId: list-inbound
+      parameters:
+        - description: Maximum number of items to return (1-500).
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Maximum number of items to return (1-500).
+            examples:
+              - 50
+            format: int64
+            maximum: 500
+            minimum: 1
+            type: integer
+        - description: "Opaque cursor: the next_cursor of the previous page. Omit for the first page."
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: "Opaque cursor: the next_cursor of the previous page. Omit for the first page."
+            maxLength: 128
+            type: string
+        - description: "inbox: not archived (default); unread: unread in the inbox; archived; all"
+          explode: false
+          in: query
+          name: box
+          schema:
+            default: inbox
+            description: "inbox: not archived (default); unread: unread in the inbox; archived; all"
+            enum:
+              - inbox
+              - unread
+              - archived
+              - all
+            type: string
+        - description: Only messages from this contact
+          explode: false
+          in: query
+          name: contact_id
+          schema:
+            description: Only messages from this contact
+            examples:
+              - 42
+            format: int64
+            minimum: 0
+            type: integer
+        - description: Search the subject, sender name and address (case-insensitive)
+          explode: false
+          in: query
+          name: q
+          schema:
+            description: Search the subject, sender name and address (case-insensitive)
+            examples:
+              - invoice
+            maxLength: 200
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListBodySummary"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List received email
+      tags:
+        - Inbox
+      x-mailroom-scope: read
+  /inbound/counts:
+    get:
+      description: |-
+        Returns whether receiving is set up and the inbox counts: unread, in the inbox, pending (not fetched yet) and failed.
+
+        Needs an API token with scope `read` or `admin`.
+      operationId: get-inbound-counts
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Counts"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Forbidden
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Count received email
+      tags:
+        - Inbox
+      x-mailroom-scope: read
+  /inbound/{id}:
+    delete:
+      description: |-
+        Deletes a received message and its attachments for good. Replies sent to it stay in the messages. Send the ETag in If-Match to get 412 if it changed.
+
+        Needs an API token with scope `admin`.
+      operationId: delete-inbound
+      parameters:
+        - description: Received message ID
+          in: path
+          name: id
+          required: true
+          schema:
+            description: Received message ID
+            examples:
+              - 12
+            format: int64
+            minimum: 1
+            type: integer
+        - description: ETag of the version you last read (e.g. "v3"). If the resource changed since, the request fails with 412 instead of overwriting the change.
+          in: header
+          name: If-Match
+          schema:
+            description: ETag of the version you last read (e.g. "v3"). If the resource changed since, the request fails with 412 instead of overwriting the change.
+            examples:
+              - "\"v3\""
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Delete a received email
+      tags:
+        - Inbox
+      x-mailroom-scope: admin
+    get:
+      description: |-
+        Returns one received message with its text and HTML bodies, the SES spam, virus, SPF, DKIM and DMARC verdicts, the attachment list and the replies sent from Mailroom. The HTML is as received and untrusted: show it only sandboxed. Reading it doesn't mark it read; use update-inbound.
+
+        Needs an API token with scope `read` or `admin`.
+      operationId: get-inbound
+      parameters:
+        - description: Received message ID
+          in: path
+          name: id
+          required: true
+          schema:
+            description: Received message ID
+            examples:
+              - 12
+            format: int64
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboundMessage"
+          description: OK
+          headers:
+            ETag:
+              schema:
+                description: Version of the message; send it back in If-Match
+                type: string
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Get a received email
+      tags:
+        - Inbox
+      x-mailroom-scope: read
+    patch:
+      description: |-
+        Sets `read` and/or `archived`; omitted fields stay. Send the ETag in If-Match to get 412 instead of overwriting a concurrent change.
+
+        Needs an API token with scope `admin`.
+      operationId: update-inbound
+      parameters:
+        - description: Received message ID
+          in: path
+          name: id
+          required: true
+          schema:
+            description: Received message ID
+            examples:
+              - 12
+            format: int64
+            minimum: 1
+            type: integer
+        - description: ETag of the version you last read (e.g. "v3"). If the resource changed since, the request fails with 412 instead of overwriting the change.
+          in: header
+          name: If-Match
+          schema:
+            description: ETag of the version you last read (e.g. "v3"). If the resource changed since, the request fails with 412 instead of overwriting the change.
+            examples:
+              - "\"v3\""
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Update"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboundMessage"
+          description: OK
+          headers:
+            ETag:
+              schema:
+                description: Version of the message; send it back in If-Match
+                type: string
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Mark a received email read, unread or archived
+      tags:
+        - Inbox
+      x-mailroom-scope: admin
+  /inbound/{id}/attachments/{position}:
+    get:
+      description: |-
+        Returns one attachment of a received message as a download (Content-Disposition: attachment) with its declared type. Attachments come from anyone who can send email to the domain: treat them as untrusted.
+
+        Needs an API token with scope `read` or `admin`.
+      operationId: get-inbound-attachment
+      parameters:
+        - description: Received message ID
+          in: path
+          name: id
+          required: true
+          schema:
+            description: Received message ID
+            examples:
+              - 12
+            format: int64
+            minimum: 1
+            type: integer
+        - description: The attachment's position (attachment_list[].position)
+          in: path
+          name: position
+          required: true
+          schema:
+            description: The attachment's position (attachment_list[].position)
+            examples:
+              - 1
+            format: int64
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/octet-stream:
+              schema:
+                contentMediaType: application/octet-stream
+                format: binary
+                type: string
+          description: The attachment
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Download an attachment
+      tags:
+        - Inbox
+      x-mailroom-scope: read
+  /inbound/{id}/reply:
+    post:
+      description: |-
+        Queues a plain-text reply (message kind reply) from the settings sender to the message's Reply-To address, or else its sender (N-5). It is threaded with In-Reply-To and References and quotes the received text unless `quote` is false. It has no layout, unsubscribe link or tracking, and doesn't count in any stats. Refused with 409 when the address is suppressed or its contact bounced or complained, and for a message that isn't fetched yet. The message is marked read. Answers 202 with the queued message ID (GET /messages/{id} shows its delivery); `?dry_run=true` queues nothing and answers 200.
+
+        Needs an API token with scope `admin`.
+      operationId: reply-inbound
+      parameters:
+        - description: Received message ID
+          in: path
+          name: id
+          required: true
+          schema:
+            description: Received message ID
+            examples:
+              - 12
+            format: int64
+            minimum: 1
+            type: integer
+        - description: Run the operation in a transaction that is rolled back, and return what would happen without changing anything.
+          explode: false
+          in: query
+          name: dry_run
+          schema:
+            description: Run the operation in a transaction that is rolled back, and return what would happen without changing anything.
+            type: boolean
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplyInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplyResult"
+          description: "Dry run (?dry_run=true): where the reply would go and its subject; nothing was queued"
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplyResult"
+          description: Accepted
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Reply to a received email
+      tags:
+        - Inbox
+      x-mailroom-scope: admin
   /jobs:
     get:
       description: |-

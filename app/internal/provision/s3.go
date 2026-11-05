@@ -15,6 +15,7 @@ var (
 	s3NoPublicAccessBlock = []string{"NoSuchPublicAccessBlockConfiguration"}
 	s3NoEncryption        = []string{"ServerSideEncryptionConfigurationNotFoundError"}
 	s3NoLifecycle         = []string{"NoSuchLifecycleConfiguration"}
+	s3NoBucketPolicy      = []string{"NoSuchBucketPolicy"}
 	// s3AccessDenied is answered when the setup user may not read a bucket
 	// setting. Guide step 2.6 grants only the Put* actions, so the setting
 	// is then written without comparing it first.
@@ -61,6 +62,28 @@ func readState(err error, missing []string, op string) (bucketState, error) {
 	}
 }
 
+// bucketSpec describes one Mailroom-owned bucket: its name, the label its
+// steps are reported under, and its expiry rule.
+type bucketSpec struct {
+	name   string
+	label  string // step name prefix: "s3" or "s3 inbound"
+	prefix string // the key prefix the lifecycle rule expires
+	days   int32
+	ruleID string
+	// versioning turns on versioning and expires overwritten versions too.
+	versioning bool
+}
+
+func (b bucketSpec) stepName(s string) string { return b.label + " " + s }
+
+// backupSpec is the backup bucket of this run.
+func (r *run) backupSpec() bucketSpec {
+	return bucketSpec{
+		name: BackupBucketName(r.res.AccountID, r.c.Region), label: "s3",
+		prefix: BackupPrefix, days: BackupRetentionDays, ruleID: LifecycleRuleID, versioning: true,
+	}
+}
+
 // bucket ensures the private, encrypted, versioned backup bucket whose
 // backups/ objects (and their overwritten versions) expire after
 // BackupRetentionDays. A bucket created in this run is configured without
@@ -71,9 +94,18 @@ func (r *run) bucket(ctx context.Context) error {
 	if !r.in.BackupBucket {
 		return nil
 	}
-	name := BackupBucketName(r.res.AccountID, r.c.Region)
-	r.bucketName = name
-	r.res.BackupBucket = name
+	spec := r.backupSpec()
+	r.bucketName = spec.name
+	r.res.BackupBucket = spec.name
+	_, err := r.ensureBucket(ctx, spec)
+	return err
+}
+
+// ensureBucket creates the bucket of spec when missing and converges its
+// public access block, encryption, versioning (when spec asks) and
+// lifecycle rule. It reports whether the bucket was created in this run.
+func (r *run) ensureBucket(ctx context.Context, spec bucketSpec) (bool, error) {
+	name := spec.name
 	b := aws.String(name)
 	owner := aws.String(r.res.AccountID)
 
@@ -81,7 +113,7 @@ func (r *run) bucket(ctx context.Context) error {
 	_, err := r.c.S3.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: b, ExpectedBucketOwner: owner})
 	switch {
 	case err == nil:
-		r.step("s3 bucket", ActionUnchanged, name)
+		r.step(spec.stepName("bucket"), ActionUnchanged, name)
 	case isAPIError(err, s3NotFound...):
 		// No ObjectOwnership: setting it needs s3:PutBucketOwnershipControls,
 		// and BucketOwnerEnforced is already the default for new buckets.
@@ -92,28 +124,31 @@ func (r *run) bucket(ctx context.Context) error {
 			}
 		}
 		if _, err := r.c.S3.CreateBucket(ctx, in); err != nil {
-			return fmt.Errorf("s3 create-bucket %s: %w", name, err)
+			return false, fmt.Errorf("s3 create-bucket %s: %w", name, err)
 		}
 		created = true
-		r.step("s3 bucket", ActionCreated, name)
+		r.step(spec.stepName("bucket"), ActionCreated, name)
 	default:
-		return fmt.Errorf("s3 head-bucket %s (it may belong to another account): %w", name, err)
+		return false, fmt.Errorf("s3 head-bucket %s (it may belong to another account): %w", name, err)
 	}
 
-	for _, f := range []func(context.Context, *string, *string, bool) error{
+	steps := []func(context.Context, bucketSpec, *string, *string, bool) error{
 		r.bucketPublicAccessBlock,
 		r.bucketEncryption,
-		r.bucketVersioning,
-		r.bucketLifecycle,
-	} {
-		if err := f(ctx, b, owner, created); err != nil {
-			return err
+	}
+	if spec.versioning {
+		steps = append(steps, r.bucketVersioning)
+	}
+	steps = append(steps, r.bucketLifecycle)
+	for _, f := range steps {
+		if err := f(ctx, spec, b, owner, created); err != nil {
+			return created, err
 		}
 	}
-	return nil
+	return created, nil
 }
 
-func (r *run) bucketPublicAccessBlock(ctx context.Context, b, owner *string, created bool) error {
+func (r *run) bucketPublicAccessBlock(ctx context.Context, spec bucketSpec, b, owner *string, created bool) error {
 	const detail = "all public access blocked"
 	state := stateNew
 	if !created {
@@ -122,7 +157,7 @@ func (r *run) bucketPublicAccessBlock(ctx context.Context, b, owner *string, cre
 			return err
 		}
 		if state == stateRead && fullPublicAccessBlock(out.PublicAccessBlockConfiguration) {
-			r.step("s3 public access block", ActionUnchanged, detail)
+			r.step(spec.stepName("public access block"), ActionUnchanged, detail)
 			return nil
 		}
 	}
@@ -139,7 +174,7 @@ func (r *run) bucketPublicAccessBlock(ctx context.Context, b, owner *string, cre
 	if err != nil {
 		return fmt.Errorf("s3 put-public-access-block: %w", err)
 	}
-	r.step("s3 public access block", state.action(), detail+state.suffix("s3:GetBucketPublicAccessBlock"))
+	r.step(spec.stepName("public access block"), state.action(), detail+state.suffix("s3:GetBucketPublicAccessBlock"))
 	return nil
 }
 
@@ -148,7 +183,7 @@ func fullPublicAccessBlock(c *s3types.PublicAccessBlockConfiguration) bool {
 		aws.ToBool(c.BlockPublicPolicy) && aws.ToBool(c.RestrictPublicBuckets)
 }
 
-func (r *run) bucketEncryption(ctx context.Context, b, owner *string, created bool) error {
+func (r *run) bucketEncryption(ctx context.Context, spec bucketSpec, b, owner *string, created bool) error {
 	const detail = "SSE AES256"
 	state := stateNew
 	if !created {
@@ -157,7 +192,7 @@ func (r *run) bucketEncryption(ctx context.Context, b, owner *string, created bo
 			return err
 		}
 		if state == stateRead && aes256Only(out.ServerSideEncryptionConfiguration) {
-			r.step("s3 encryption", ActionUnchanged, detail)
+			r.step(spec.stepName("encryption"), ActionUnchanged, detail)
 			return nil
 		}
 	}
@@ -173,7 +208,7 @@ func (r *run) bucketEncryption(ctx context.Context, b, owner *string, created bo
 	if err != nil {
 		return fmt.Errorf("s3 put-bucket-encryption: %w", err)
 	}
-	r.step("s3 encryption", state.action(), detail+state.suffix("s3:GetEncryptionConfiguration"))
+	r.step(spec.stepName("encryption"), state.action(), detail+state.suffix("s3:GetEncryptionConfiguration"))
 	return nil
 }
 
@@ -188,7 +223,7 @@ func aes256Only(c *s3types.ServerSideEncryptionConfiguration) bool {
 // bucketVersioning turns on versioning. Setups whose setup user may not
 // (guide step 2.6 before s3:PutBucketVersioning was added) get a warning
 // instead of a failure, so a key rotation still works.
-func (r *run) bucketVersioning(ctx context.Context, b, owner *string, created bool) error {
+func (r *run) bucketVersioning(ctx context.Context, spec bucketSpec, b, owner *string, created bool) error {
 	const detail = "versioning enabled (overwritten backups can be recovered)"
 	state := stateNew
 	if !created {
@@ -197,7 +232,7 @@ func (r *run) bucketVersioning(ctx context.Context, b, owner *string, created bo
 			return err
 		}
 		if state == stateRead && out.Status == s3types.BucketVersioningStatusEnabled {
-			r.step("s3 versioning", ActionUnchanged, detail)
+			r.step(spec.stepName("versioning"), ActionUnchanged, detail)
 			return nil
 		}
 		if state == stateRead && out.Status == "" {
@@ -213,21 +248,24 @@ func (r *run) bucketVersioning(ctx context.Context, b, owner *string, created bo
 		r.res.Warnings = append(r.res.Warnings, "The backup bucket's versioning could not be turned on: the setup user lacks "+
 			"s3:PutBucketVersioning. Add s3:GetBucketVersioning and s3:PutBucketVersioning to its allow-mailroom-setup policy "+
 			"(guide step 2.6) and run provision ses again, so a leaked sending key can't overwrite the off-site backups for good.")
-		r.step("s3 versioning", ActionUnchanged, "not enabled: the setup user lacks s3:PutBucketVersioning")
+		r.step(spec.stepName("versioning"), ActionUnchanged, "not enabled: the setup user lacks s3:PutBucketVersioning")
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("s3 put-bucket-versioning: %w", err)
 	}
-	r.step("s3 versioning", state.action(), detail+state.suffix("s3:GetBucketVersioning"))
+	r.step(spec.stepName("versioning"), state.action(), detail+state.suffix("s3:GetBucketVersioning"))
 	return nil
 }
 
 // bucketLifecycle ensures Mailroom's expiry rule, keeping any other rules
 // it can read. When the setup user may not read the configuration, it is
 // replaced by Mailroom's rule alone (the bucket is Mailroom's own).
-func (r *run) bucketLifecycle(ctx context.Context, b, owner *string, created bool) error {
-	detail := fmt.Sprintf("expire %s (and overwritten versions) after %d days", BackupPrefix, BackupRetentionDays)
+func (r *run) bucketLifecycle(ctx context.Context, spec bucketSpec, b, owner *string, created bool) error {
+	detail := fmt.Sprintf("expire %s after %d days", spec.prefix, spec.days)
+	if spec.versioning {
+		detail = fmt.Sprintf("expire %s (and overwritten versions) after %d days", spec.prefix, spec.days)
+	}
 	state := stateNew
 	var rules []s3types.LifecycleRule
 	if !created {
@@ -239,20 +277,12 @@ func (r *run) bucketLifecycle(ctx context.Context, b, owner *string, created boo
 			rules = out.Rules
 		}
 	}
-	i := slices.IndexFunc(rules, func(l s3types.LifecycleRule) bool { return aws.ToString(l.ID) == LifecycleRuleID })
-	if i >= 0 && lifecycleRuleOK(rules[i]) {
-		r.step("s3 lifecycle", ActionUnchanged, detail)
+	i := slices.IndexFunc(rules, func(l s3types.LifecycleRule) bool { return aws.ToString(l.ID) == spec.ruleID })
+	if i >= 0 && spec.lifecycleRuleOK(rules[i]) {
+		r.step(spec.stepName("lifecycle"), ActionUnchanged, detail)
 		return nil
 	}
-	want := s3types.LifecycleRule{
-		ID:         aws.String(LifecycleRuleID),
-		Status:     s3types.ExpirationStatusEnabled,
-		Filter:     &s3types.LifecycleRuleFilter{Prefix: aws.String(BackupPrefix)},
-		Expiration: &s3types.LifecycleExpiration{Days: aws.Int32(BackupRetentionDays)},
-		NoncurrentVersionExpiration: &s3types.NoncurrentVersionExpiration{
-			NoncurrentDays: aws.Int32(BackupRetentionDays),
-		},
-	}
+	want := spec.lifecycleRule()
 	next := slices.Clone(rules)
 	if i >= 0 {
 		next[i] = want
@@ -272,13 +302,35 @@ func (r *run) bucketLifecycle(ctx context.Context, b, owner *string, created boo
 		// Other rules exist, but Mailroom's was missing.
 		action = ActionCreated
 	}
-	r.step("s3 lifecycle", action, detail+state.suffix("s3:GetLifecycleConfiguration"))
+	r.step(spec.stepName("lifecycle"), action, detail+state.suffix("s3:GetLifecycleConfiguration"))
 	return nil
 }
 
+// lifecycleRule is the expiry rule of the bucket.
+func (b bucketSpec) lifecycleRule() s3types.LifecycleRule {
+	l := s3types.LifecycleRule{
+		ID:         aws.String(b.ruleID),
+		Status:     s3types.ExpirationStatusEnabled,
+		Filter:     &s3types.LifecycleRuleFilter{Prefix: aws.String(b.prefix)},
+		Expiration: &s3types.LifecycleExpiration{Days: aws.Int32(b.days)},
+	}
+	if b.versioning {
+		l.NoncurrentVersionExpiration = &s3types.NoncurrentVersionExpiration{NoncurrentDays: aws.Int32(b.days)}
+	}
+	return l
+}
+
+func (b bucketSpec) lifecycleRuleOK(l s3types.LifecycleRule) bool {
+	ok := l.Status == s3types.ExpirationStatusEnabled &&
+		l.Filter != nil && aws.ToString(l.Filter.Prefix) == b.prefix && l.Filter.And == nil && l.Filter.Tag == nil &&
+		l.Expiration != nil && aws.ToInt32(l.Expiration.Days) == b.days
+	if b.versioning {
+		return ok && l.NoncurrentVersionExpiration != nil && aws.ToInt32(l.NoncurrentVersionExpiration.NoncurrentDays) == b.days
+	}
+	return ok
+}
+
+// lifecycleRuleOK reports whether l is the backup bucket's expiry rule.
 func lifecycleRuleOK(l s3types.LifecycleRule) bool {
-	return l.Status == s3types.ExpirationStatusEnabled &&
-		l.Filter != nil && aws.ToString(l.Filter.Prefix) == BackupPrefix && l.Filter.And == nil && l.Filter.Tag == nil &&
-		l.Expiration != nil && aws.ToInt32(l.Expiration.Days) == BackupRetentionDays &&
-		l.NoncurrentVersionExpiration != nil && aws.ToInt32(l.NoncurrentVersionExpiration.NoncurrentDays) == BackupRetentionDays
+	return bucketSpec{prefix: BackupPrefix, days: BackupRetentionDays, versioning: true}.lifecycleRuleOK(l)
 }

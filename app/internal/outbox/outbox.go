@@ -27,6 +27,7 @@ type MessageSpec struct {
 	EmailID        int64 // content source; 0 when SystemTemplate is set
 	ContactID      int64
 	SystemTemplate string         // core.Template*; "" when EmailID is set
+	InboundID      int64          // kind reply: the received mail it answers
 	ToEmail        string         // required; the contact's email for contact messages
 	Data           map[string]any // extra template data (messages.data)
 	NotBefore      *time.Time     // earliest send time; nil = now
@@ -53,13 +54,13 @@ func Enqueue(ctx context.Context, q db.Querier, clock core.Clock, s MessageSpec)
 
 	err = q.QueryRowContext(ctx, `
 		INSERT INTO messages (kind, broadcast_id, enrollment_id, step_id, email_id, system_template,
-		                      contact_id, to_email, data, status, next_attempt_at, queued_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)
+		                      contact_id, to_email, data, status, next_attempt_at, queued_at, updated_at, inbound_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)
 		ON CONFLICT DO NOTHING
 		RETURNING id`,
 		string(s.Kind), db.NullID(s.BroadcastID), db.NullID(s.EnrollmentID), db.NullID(s.StepID),
 		db.NullID(s.EmailID), s.SystemTemplate, db.NullID(s.ContactID), to, data,
-		next, now, now,
+		next, now, now, db.NullID(s.InboundID),
 	).Scan(&id)
 	if err == nil {
 		return id, true, nil
@@ -96,6 +97,8 @@ func Enqueue(ctx context.Context, q db.Querier, clock core.Clock, s MessageSpec)
 //   - test: EmailID or a system template; no broadcast/enrollment/step
 //     (tests must not count in stats or block real sends).
 //   - alert: SystemTemplate alert; no contact, broadcast, enrollment or step.
+//   - reply: SystemTemplate reply and InboundID; no broadcast, enrollment
+//     or step (the contact is optional).
 //
 // Every kind needs ToEmail and exactly one of EmailID or SystemTemplate.
 func Validate(s MessageSpec) (string, error) {
@@ -115,11 +118,15 @@ func Validate(s MessageSpec) (string, error) {
 		}
 	}
 	switch s.SystemTemplate {
-	case "", core.TemplateOptinConfirm, core.TemplateResubscribeConfirm, core.TemplateAlert:
+	case "", core.TemplateOptinConfirm, core.TemplateResubscribeConfirm, core.TemplateAlert, core.TemplateReply:
 	default:
 		return "", core.Invalid("system_template", "unknown system template %q", s.SystemTemplate)
 	}
-	if (s.EmailID == 0) == (s.SystemTemplate == "") {
+	// A test of unsaved editor content carries its content in data["draft"]
+	// instead of an email (content.SendTestDraft).
+	_, draft := s.Data["draft"].(map[string]any)
+	draftTest := s.Kind == core.KindTest && draft && s.EmailID == 0 && s.SystemTemplate == ""
+	if !draftTest && (s.EmailID == 0) == (s.SystemTemplate == "") {
 		return "", core.Invalid("email_id", "exactly one of email_id and system_template is required")
 	}
 
@@ -155,6 +162,12 @@ func Validate(s MessageSpec) (string, error) {
 		}
 	case core.KindTest:
 		checks = []error{
+			require("broadcast_id", s.BroadcastID == 0 && s.EnrollmentID == 0 && s.StepID == 0, "must be empty"),
+		}
+	case core.KindReply:
+		checks = []error{
+			require("system_template", s.SystemTemplate == core.TemplateReply, "must be reply"),
+			require("inbound_id", s.InboundID > 0, "is required"),
 			require("broadcast_id", s.BroadcastID == 0 && s.EnrollmentID == 0 && s.StepID == 0, "must be empty"),
 		}
 	case core.KindAlert:

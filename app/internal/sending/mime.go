@@ -30,6 +30,12 @@ type mimeMessage struct {
 	// when set, List-Unsubscribe and List-Unsubscribe-Post are added.
 	ListUnsubscribe string
 	FeedbackID      string // "" = no Feedback-ID header
+	// InReplyTo and References thread a reply (message IDs without <>).
+	InReplyTo  string
+	References []string
+	// AutoSubmitted marks automatic mail (alerts), so auto-responders and
+	// Mailroom's own inbox don't answer it (RFC 3834).
+	AutoSubmitted bool
 }
 
 // maxLine is where headers are folded (RFC 5322 recommends 78).
@@ -113,6 +119,21 @@ func buildMIME(m mimeMessage) ([]byte, error) {
 	if m.FeedbackID != "" {
 		fold(&hdr, "Feedback-ID", clean(m.FeedbackID))
 	}
+	if id := msgIDHeader(m.InReplyTo); id != "" {
+		fold(&hdr, "In-Reply-To", id)
+	}
+	var refs []string
+	for _, r := range m.References {
+		if id := msgIDHeader(r); id != "" {
+			refs = append(refs, id)
+		}
+	}
+	if len(refs) > 0 {
+		fold(&hdr, "References", strings.Join(refs, " "))
+	}
+	if m.AutoSubmitted {
+		fold(&hdr, "Auto-Submitted", "auto-generated")
+	}
 	fold(&hdr, "Content-Type", `multipart/alternative; boundary="`+boundary+`"`)
 	hdr.WriteString("\r\n")
 
@@ -142,6 +163,16 @@ func buildMIME(m mimeMessage) ([]byte, error) {
 	out = append(out, hdr.Bytes()...)
 	out = append(out, buf.Bytes()...)
 	return out, nil
+}
+
+// msgIDHeader returns "<id>" for a message ID given with or without angle
+// brackets, or "" when it is empty or not a plausible id (no "@", spaces).
+func msgIDHeader(id string) string {
+	id = strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(clean(id)), "<"), ">")
+	if id == "" || !strings.Contains(id, "@") || strings.ContainsAny(id, " <>") || len(id) > 250 {
+		return ""
+	}
+	return "<" + id + ">"
 }
 
 // normalizeNewlines turns CRLF and lone CR into LF; the quoted-printable

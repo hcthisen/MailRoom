@@ -12,7 +12,8 @@
 | REST API + OpenAPI 3.1 | **Huma v2** (`github.com/danielgtaylor/huma/v2` + `adapters/humago`). It is code-first: the spec is generated from the registered operations, so it can't drift. It is served at `/api/v1/openapi.json` and `.yaml` (Huma's CDN docs page is disabled). `TestSpecSnapshot` in `internal/app`, the only package that registers every operation, checks the snapshot in `api/openapi.yaml`, and `-update` rewrites it |
 | Admin UI | `html/template` + htmx 2 (vendored `static/htmx.min.js`, see `static/VENDOR.md`), embedded with `embed` |
 | HTTPS | `golang.org/x/crypto/acme/autocert` (built in), or `HTTP_ONLY=1` / `serve --http-only` behind a proxy |
-| AWS | AWS SDK for Go v2: `sesv2`, `sns`, `iam`, `s3`, `sts` |
+| AWS | AWS SDK for Go v2: `sesv2`, `sns`, `iam`, `s3`, `sts`, and `ses` (v1, only for the receipt rules of receiving; `provision ses` uses it, the server never does) |
+| MIME charsets (received mail) | `golang.org/x/net/html/charset` (with the `golang.org/x/text` encodings it pulls in) |
 | Cloudflare | plain `net/http` client (`internal/provision/cloudflare.go`) |
 | Markdown | `github.com/yuin/goldmark` |
 | YAML | `gopkg.in/yaml.v3` |
@@ -58,12 +59,14 @@ app/
     broadcasts/    [W2] broadcasts, snapshot job, schedule/pause/resume/cancel, circuit breaker, stats, web archive
     forms/         [W2] forms CRUD, public /f endpoints, hosted page, snippet, double opt-in, submissions, opt-in expiry
     imports/       [W2] CSV import (I-1) with dry run, as a resumable job
+    inbound/       [W1] receiving (PRD §6.16): records SES receipt notifications (implements core.InboundReceiver),
+                        inbound-fetcher worker (S3 fetch, MIME parse, attachments in SQLite), Inbox API, replies (kind reply)
     app/           [W3] wiring: builds every service, registers routes/jobs/hooks/workers; end-to-end tests
     ui/            [W3] admin UI under /admin/ (htmx), action registry, UI/API parity test. Page groups:
                         <group>_*.go + templates/<group>/ (audience, broadcasts, automation, content, admin, dashboard);
                         templates/<group>/_*.html are partials parsed into every page of the group (embedded with all:templates)
     deps/          //go:build tools: pins the third-party modules (never compiled)
-  static/          [W3] htmx.min.js, app.css, app.js + VENDOR.md; package static embeds them
+  static/          [W3] htmx.min.js, app.css, app.js, editor.js (the email editor: visual mode, Personalise menu, image picker, preview sizing) + VENDOR.md; package static embeds them
   docs/            [W3] api.md (agent guide, served at /api/v1/docs), import-format.md, sequence-format.md; package docs embeds them
   api/openapi.yaml [W3] spec snapshot
   Dockerfile       [W3] multi-stage: golang:${GO_VERSION}-alpine (vendored modules) → gcr.io/distroless/static-debian12:nonroot, uid 65532
@@ -103,7 +106,7 @@ type Contact struct {
     Status ContactStatus; StatusChangedAt, CreatedAt, UpdatedAt time.Time; Version int64
 }
 
-type MessageKind string   // "broadcast","sequence","optin","test","alert"
+type MessageKind string   // "broadcast","sequence","optin","test","alert","reply"
 type MessageStatus string // "queued","sending","sent","delivered","bounced","complained","failed","skipped"
 func IsMarketingKind(MessageKind) bool              // broadcast, sequence
 func CanReceive(ContactStatus, MessageKind) bool    // the §6 send rules
@@ -176,6 +179,13 @@ type EnrollOptions struct {
 }
 // Enroll returns (0, nil) when it skips: the reentry policy, a missing or non-active contact,
 // a contact that already has an exit tag, or a sequence without steps.
+
+// Implemented by inbound. Used by events (the SNS webhook) for SES receipt notifications
+// (notificationType "Received"): Received runs in the webhook's transaction, does no network
+// I/O, and records a pending inbound_messages row; the inbound-fetcher worker fetches the mail.
+type InboundReceiver interface {
+    Received(ctx context.Context, tx *sql.Tx, snsMessageID, message string) error
+}
 
 // Implemented by sending. The email provider abstraction (SES in production, fake in tests).
 type EmailProvider interface {
@@ -286,6 +296,7 @@ Environment variables are loaded once at start (`config.LoadFrom`). Every valida
 | `SES_CONFIGURATION_SET` | default `mailroom` | |
 | `SNS_TOPIC_ARN` | the pinned topic (X-2). Its region also sets the SNS certificate host | |
 | `BACKUP_BUCKET` | optional S3 bucket | |
+| `INBOUND_BUCKET`, `INBOUND_DOMAIN` | receiving (PRD §6.16), written by `provision ses`: the bucket SES stores received mail in, and the domain it receives for (DOMAIN or a subdomain). Both set or both empty; empty = receiving off. The fetcher needs the sending user's keys too | |
 | `MAILROOM_SECRET` | HMAC key, at least 32 characters. If it is empty, a key is generated once and stored in `<data>/secret.key` (0600) | |
 | `HTTP_ONLY`, `HTTP_ADDR` | `HTTP_ONLY=1` (or `serve --http-only`) serves plain HTTP on `HTTP_ADDR` (default `:8080`) | |
 | `TRUSTED_PROXIES` | comma-separated IPs/CIDRs of reverse proxies whose `X-Forwarded-For` is believed (e.g. `172.16.0.0/12`). Default none: the connection address is the client. `HTTP_ONLY` alone never trusts the header | |
@@ -315,7 +326,8 @@ Send rules (`core.CanReceive` plus the sender's final check, D-6):
 - Only `active` contacts receive `broadcast` and `sequence` messages.
 - `optin` messages go to `pending` and `unsubscribed` contacts (for resubscribe) and to `active` ones (a double opt-in form submitted for an existing subscriber), never to bounced, complained or manually suppressed ones.
 - `test` messages carry no contact. They are skipped when the address is in the suppressions table, or belongs to a contact that isn't `active` or `pending`, so a test never reaches an address that unsubscribed, bounced, complained or was suppressed.
-- `alert` messages are never suppressed.
+- `alert` messages are never suppressed. They carry `Auto-Submitted: auto-generated`.
+- `reply` messages (an answer from the Inbox to a received email) go to any address except one whose contact bounced or complained; the suppressions table still blocks the rest. They have no layout, unsubscribe link, List-Unsubscribe header or tracking, carry `In-Reply-To`/`References`, and render the system template `reply` from their data (subject, body, quote).
 - Every kind except `alert` is also checked against the suppressions table. Sequence messages are skipped when their enrollment has exited.
 
 An unsubscribe from a contact that is bounced, complained or suppressed_manual can't change its status (see the table), but it is never lost. `contactstore.RecordOptOut` sets `contacts.unsubscribe_requested_at`, and a later bounced/suppressed_manual → active (an admin lifting the bounce or the suppression) then lands on `unsubscribed`. This covers every way the request can arrive:
@@ -385,6 +397,7 @@ type Worker interface { Name() string; Run(ctx context.Context) error } // retur
 | `health-watch` | system | daily, the first run 15 min after start. It runs the cert, backup-age and disk checks and alerts (§4.6) |
 | `jobs` | jobs | continuous: claims queued jobs, polls every 1 s when idle |
 | `idempotency-cleanup` | api | hourly |
+| `inbound-fetcher` | inbound | every 5 s when idle: fetches pending received mail from S3, parses and stores it, deletes the S3 copy; retries after 1 min, 5 min, 30 min, 2 h and 6 h, then fails the message. **Only started with `INBOUND_BUCKET`/`INBOUND_DOMAIN` and AWS credentials** |
 | `ui-doctor` | ui | 30 s after start, then every 10 min. It caches the doctor report for the dashboard, so page loads never run network checks |
 
 On shutdown, the HTTP server stops first (20 s). Then the workers get their context cancelled and at most 30 s to return (`server.Supervisor.RunUntil`, `app.WorkerDrainTimeout`). The process then exits anyway. The compose file's `stop_grace_period` is 60 s.
@@ -482,3 +495,10 @@ These are the decisions the build made where the PRD or the first version of thi
 - `provision dns` never changes or deletes records, and exits 2 on a conflict.
 
 **Footprint:** the static binary is about 43 MB, mostly the AWS SDK. The image is about the binary plus distroless/static (a few MB).
+
+### Email editor (UI, added after the first build)
+
+- The editor (`templates/components/editor.html`, `static/editor.js`, `internal/ui/editor.go`) has three modes on the same `format`/`body` fields: **Visual** (a contenteditable surface that writes HTML into the textarea, starting with `content.VisualMarker` = `<!-- mailroom:visual -->`), **HTML code** and **Markdown**. A visual body gets the same inline styles as Markdown output (`content.IsVisualBody`), and `<a class="mr-button">` becomes a button in the layout's brand colour; other HTML is sent exactly as written. Without JavaScript the editor is the plain format choice and textarea.
+- **Preview as**: the preview posts `preview_contact` (a contact ID from `/admin/editor/contacts`, the audience's active contacts), so merge fields show real data. Previews of the install's own content use `sandbox="allow-same-origin"` (never `allow-scripts`) so `editor.js` can size them; received mail keeps `sandbox=""`.
+- **Send test** works before saving: `content.SendTestDraft` (API `send-test-draft`, `POST /emails/test`) queues a `test` message with no `email_id` whose `data.draft` holds the content; `Render` renders it from there (the outbox accepts a test with a draft and no email).
+- **Merge fields**: `content.MergeFields` (API `list-merge-fields`) lists the contact fields and the attribute keys found on contacts with counts and an example; `content.UnguardedFields` feeds the broadcast checklist's personalisation warning.

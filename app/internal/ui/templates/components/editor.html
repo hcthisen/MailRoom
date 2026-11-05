@@ -1,48 +1,205 @@
 {{/* email-editor: the content fields of an email with a live preview.
 Put it inside the page's <form>. dict:
   Form        *ui.Form with subject, preheader, format and body
+  Me          the signed-in user's address (default test recipient)
+  Audience    true on the broadcast form: "Preview as" follows #f-audience
   PreviewURL  optional; default /admin/preview/email (render-email)
-The preview posts the enclosing form (htmx, CSRF header from <body>) on
-load and while typing, and shows the rendered HTML in a sandboxed iframe. */}}
-{{define "email-editor"}}<div class="editor">
-  <div>
+Without JavaScript it is a plain form: the format radios and a textarea.
+static/editor.js adds the visual editor (format html, marked with
+<!-- mailroom:visual -->), the toolbars, the merge-field menu and the image
+picker. The preview posts the enclosing form (htmx, CSRF header from
+<body>) on load and while typing, and shows the rendered HTML in a
+sandboxed iframe, as the contact chosen under "Preview as". */}}
+{{define "email-editor"}}{{$f := or (.Form.Get "format") "html"}}<div class="editor" data-editor>
+  <div class="editor-main">
     <div class="field">
-      <label for="f-subject">Subject</label>
-      <input id="f-subject" name="subject" type="text" required maxlength="300" value="{{.Form.Get "subject"}}"{{if .Form.Err "subject"}} aria-invalid="true" aria-describedby="f-subject-error"{{else}} aria-describedby="f-subject-hint"{{end}}>
-      {{if .Form.Err "subject"}}<p class="error-text" id="f-subject-error">{{.Form.Err "subject"}}</p>{{else}}<p class="hint" id="f-subject-hint">Merge fields work here too, e.g. {{"{{first_name | \"there\"}}"}}.</p>{{end}}
+      <div class="label-row"><label for="f-subject">Subject line</label>
+        <button type="button" class="btn btn-sm btn-ghost" data-merge-menu="f-subject" hidden aria-haspopup="true" title="Insert a personalisation field">{{"{ }"}} Personalise</button></div>
+      <input id="f-subject" name="subject" type="text" required maxlength="300" value="{{.Form.Get "subject"}}" placeholder="What is this email about?"{{if .Form.Err "subject"}} aria-invalid="true" aria-describedby="f-subject-error"{{end}}>
+      {{with .Form.Err "subject"}}<p class="error-text" id="f-subject-error">{{.}}</p>{{end}}
     </div>
     <div class="field">
-      <label for="f-preheader">Preheader <span class="optional">(optional)</span></label>
-      <input id="f-preheader" name="preheader" type="text" maxlength="300" value="{{.Form.Get "preheader"}}"{{if .Form.Err "preheader"}} aria-invalid="true" aria-describedby="f-preheader-error"{{else}} aria-describedby="f-preheader-hint"{{end}}>
-      {{if .Form.Err "preheader"}}<p class="error-text" id="f-preheader-error">{{.Form.Err "preheader"}}</p>{{else}}<p class="hint" id="f-preheader-hint">The preview text most inboxes show after the subject.</p>{{end}}
+      <div class="label-row"><label for="f-preheader">Preview text <span class="optional">(optional)</span></label>
+        <button type="button" class="btn btn-sm btn-ghost" data-merge-menu="f-preheader" hidden aria-haspopup="true" title="Insert a personalisation field">{{"{ }"}} Personalise</button></div>
+      <input id="f-preheader" name="preheader" type="text" maxlength="300" value="{{.Form.Get "preheader"}}" placeholder="The line most inboxes show after the subject"{{if .Form.Err "preheader"}} aria-invalid="true" aria-describedby="f-preheader-error"{{end}}>
+      {{with .Form.Err "preheader"}}<p class="error-text" id="f-preheader-error">{{.}}</p>{{end}}
     </div>
-    <fieldset class="field choices">
-      <legend>Format</legend>
-      {{$f := or (.Form.Get "format") "markdown"}}
-      <label class="check"><input type="radio" name="format" value="markdown"{{if eq $f "markdown"}} checked{{end}}> Markdown</label>
-      <label class="check"><input type="radio" name="format" value="html"{{if eq $f "html"}} checked{{end}}> HTML</label>
-      {{with .Form.Err "format"}}<p class="error-text">{{.}}</p>{{end}}
-    </fieldset>
-    <div class="field">
-      <label for="f-body">Body</label>
-      <textarea id="f-body" name="body" class="code" required spellcheck="true"{{if .Form.Err "body"}} aria-invalid="true" aria-describedby="f-body-error"{{else}} aria-describedby="f-body-hint"{{end}}>{{.Form.Raw "body"}}</textarea>
-      {{if .Form.Err "body"}}<p class="error-text" id="f-body-error">{{.Form.Err "body"}}</p>{{else}}<p class="hint" id="f-body-hint">Wrapped in the base layout with the unsubscribe footer when sent. Merge fields: {{"{{first_name}}"}}, {{"{{last_name}}"}}, {{"{{email}}"}}, {{"{{attr.key}}"}}, with a fallback after a bar: {{"{{first_name | \"there\"}}"}}.</p>{{end}}
+
+    <div class="field body-field">
+      <div class="label-row">
+        <span class="label" id="f-body-label">Email body</span>
+        <div class="segmented" role="group" aria-label="Editor" data-modes hidden>
+          <button type="button" data-mode="visual">Visual</button>
+          <button type="button" data-mode="html">HTML code</button>
+          <button type="button" data-mode="markdown">Markdown</button>
+        </div>
+      </div>
+      <fieldset class="choices" data-format-radios>
+        <legend>Format</legend>
+        <label class="check"><input type="radio" name="format" value="html"{{if eq $f "html"}} checked{{end}}> HTML</label>
+        <label class="check"><input type="radio" name="format" value="markdown"{{if eq $f "markdown"}} checked{{end}}> Markdown</label>
+        {{with .Form.Err "format"}}<p class="error-text">{{.}}</p>{{end}}
+      </fieldset>
+
+      <div class="rte-toolbar" role="toolbar" aria-label="Formatting" data-toolbar hidden>
+        <select data-cmd="block" aria-label="Text style" class="tb-select">
+          <option value="p">Paragraph</option>
+          <option value="h1">Heading 1</option>
+          <option value="h2">Heading 2</option>
+          <option value="h3">Heading 3</option>
+          <option value="blockquote">Quote</option>
+        </select>
+        <span class="tb-sep"></span>
+        <button type="button" data-cmd="bold" title="Bold (Ctrl+B)" aria-label="Bold"><b>B</b></button>
+        <button type="button" data-cmd="italic" title="Italic (Ctrl+I)" aria-label="Italic"><i>I</i></button>
+        <button type="button" data-cmd="underline" title="Underline (Ctrl+U)" aria-label="Underline" data-visual-only><u>U</u></button>
+        <button type="button" data-cmd="strikeThrough" title="Strikethrough" aria-label="Strikethrough"><s>S</s></button>
+        <label class="tb-color" title="Text colour" data-visual-only><span aria-hidden="true">A</span><input type="color" data-cmd="foreColor" value="#d0342c" aria-label="Text colour"></label>
+        <span class="tb-sep"></span>
+        <button type="button" data-cmd="insertUnorderedList" title="Bulleted list" aria-label="Bulleted list">{{template "icon" "list"}}</button>
+        <button type="button" data-cmd="insertOrderedList" title="Numbered list" aria-label="Numbered list">{{template "icon" "list-ol"}}</button>
+        <span class="tb-sep" data-visual-only></span>
+        <button type="button" data-cmd="justifyLeft" title="Align left" aria-label="Align left" data-visual-only>{{template "icon" "align-left"}}</button>
+        <button type="button" data-cmd="justifyCenter" title="Centre" aria-label="Centre" data-visual-only>{{template "icon" "align-center"}}</button>
+        <button type="button" data-cmd="justifyRight" title="Align right" aria-label="Align right" data-visual-only>{{template "icon" "align-right"}}</button>
+        <span class="tb-sep"></span>
+        <button type="button" data-cmd="link" title="Link (Ctrl+K)" aria-label="Link">{{template "icon" "link"}}</button>
+        <button type="button" data-cmd="image" title="Image" aria-label="Image">{{template "icon" "image"}}</button>
+        <button type="button" data-cmd="button" title="Button" aria-label="Button" class="tb-text">Button</button>
+        <button type="button" data-cmd="insertHorizontalRule" title="Divider" aria-label="Divider">{{template "icon" "divider"}}</button>
+        <span class="tb-sep"></span>
+        <button type="button" data-cmd="removeFormat" title="Clear formatting" aria-label="Clear formatting" data-visual-only>{{template "icon" "clear"}}</button>
+        <button type="button" data-cmd="undo" title="Undo (Ctrl+Z)" aria-label="Undo" data-visual-only>{{template "icon" "undo"}}</button>
+        <button type="button" data-cmd="redo" title="Redo (Ctrl+Y)" aria-label="Redo" data-visual-only>{{template "icon" "redo"}}</button>
+        <span class="spacer"></span>
+        <button type="button" class="tb-text tb-merge" data-merge-menu="f-body" aria-haspopup="true" title="Insert a personalisation field">{{"{ }"}} Personalise</button>
+      </div>
+      <div class="rte-surface" data-surface contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="f-body-label" hidden></div>
+      <textarea id="f-body" name="body" class="code" required spellcheck="true" aria-labelledby="f-body-label"{{if .Form.Err "body"}} aria-invalid="true" aria-describedby="f-body-error"{{else}} aria-describedby="f-body-hint"{{end}}>{{.Form.Raw "body"}}</textarea>
+      {{if .Form.Err "body"}}<p class="error-text" id="f-body-error">{{.Form.Err "body"}}</p>{{else}}<p class="hint" id="f-body-hint" data-body-hint>Your layout (logo, footer, unsubscribe link) is added when it is sent. Personalise with {{"{{first_name}}"}}, or with a fallback: {{"{{first_name | \"there\"}}"}}.</p>{{end}}
+    </div>
+
+    <div class="popover" data-merge-popover hidden role="dialog" aria-label="Personalisation fields">
+      <div class="popover-head"><strong>Insert a personalisation field</strong><button type="button" class="dismiss" data-close aria-label="Close">×</button></div>
+      <label class="small" for="merge-fallback">Fallback when a contact has no value <span class="optional">(optional)</span></label>
+      <input id="merge-fallback" type="text" data-merge-fallback placeholder='e.g. "there" for Hi there' autocomplete="off">
+      <div class="merge-list" hx-get="/admin/editor/fields" hx-trigger="editor:load-fields once" hx-swap="innerHTML"><p class="muted small">Loading fields…</p></div>
+    </div>
+
+    <div class="popover popover-wide" data-image-popover hidden role="dialog" aria-label="Insert an image">
+      <div class="popover-head"><strong>Insert an image</strong><button type="button" class="dismiss" data-close aria-label="Close">×</button></div>
+      <div data-media-list hx-get="/admin/editor/media" hx-trigger="editor:load-media" hx-swap="innerHTML"><p class="muted small">Loading images…</p></div>
+      <div class="row mt-3">
+        <input type="url" data-image-url placeholder="…or paste an image address (https://…)" aria-label="Image address">
+        <button type="button" class="btn btn-sm" data-image-url-insert>Insert</button>
+      </div>
+    </div>
+
+    <div class="popover" data-link-popover hidden role="dialog" aria-label="Link">
+      <div class="popover-head"><strong data-link-title>Insert a link</strong><button type="button" class="dismiss" data-close aria-label="Close">×</button></div>
+      <label class="small" for="link-url">Web address</label>
+      <input id="link-url" type="url" data-link-url placeholder="https://example.com" autocomplete="off">
+      <label class="small mt-2" for="link-text">Text</label>
+      <input id="link-text" type="text" data-link-text autocomplete="off">
+      <div class="row mt-3"><button type="button" class="btn btn-sm btn-primary" data-link-apply>Insert</button><button type="button" class="btn btn-sm btn-ghost" data-link-remove hidden>Remove link</button></div>
     </div>
   </div>
-  <section class="card preview-panel" aria-labelledby="preview-title">
-    <div class="card-header"><h2 id="preview-title">Preview</h2><span class="htmx-indicator muted small">Updating…</span></div>
-    <div id="email-preview" aria-live="polite"
-         hx-post="{{or .PreviewURL "/admin/preview/email"}}"
-         hx-trigger="load, input changed delay:700ms from:closest form, change from:closest form"
-         hx-include="closest form" hx-target="this" hx-swap="innerHTML" hx-sync="this:replace">
-      <p class="muted">The preview appears here.</p>
-    </div>
-  </section>
+
+  {{template "preview-aside" .}}
 </div>{{end}}
 
 {{/* email-preview: the fragment the preview action returns. .Data is
 ui.previewData. The HTML is escaped into srcdoc (the browser decodes it);
 sandbox without allow-scripts/allow-same-origin keeps the email inert. */}}
-{{define "email-preview"}}{{with .Data}}{{if .Error}}<p class="preview-error" role="alert">{{.Error}}</p>{{else}}<div class="preview-meta"><span class="muted">Subject</span><strong>{{.Subject}}</strong></div>
-<iframe class="preview-frame" title="Email preview" sandbox="" referrerpolicy="no-referrer" loading="lazy" srcdoc="{{.HTML}}"></iframe>
+{{define "email-preview"}}{{with .Data}}{{if .Error}}<p class="preview-error" role="alert">{{.Error}}</p>{{else}}<div class="inbox-row">
+  <div class="inbox-avatar" aria-hidden="true">✉</div>
+  <div class="inbox-lines"><span class="inbox-from muted small">{{or .From "Inbox"}}</span><span class="inbox-line"><strong class="inbox-subject">{{.Subject}}</strong>{{with .Preheader}} <span class="inbox-pre">– {{.}}</span>{{end}}</span></div>
+</div>
+<div class="preview-device"><iframe class="preview-frame" data-autosize title="Email preview" sandbox="allow-same-origin" referrerpolicy="no-referrer" srcdoc="{{.HTML}}"></iframe></div>
 <details><summary class="small">Plain-text version</summary><pre>{{.Text}}</pre></details>{{end}}{{end}}{{end}}
+
+{{/* editor-contacts: the <option>s of "Preview as". .Data is ui.editorContactsData. */}}
+{{define "editor-contacts"}}{{with .Data}}<option value="0"{{if eq .Selected 0}} selected{{end}}>No contact (show fallbacks)</option>
+{{range .Contacts}}<option value="{{.ID}}"{{if eq .ID $.Data.Selected}} selected{{end}}>{{if or .FirstName .LastName}}{{.FirstName}} {{.LastName}} · {{end}}{{.Email}}</option>
+{{end}}{{if .Error}}<option value="0" disabled>{{.Error}}</option>{{else if not .Contacts}}<option value="0" disabled>{{if .Segment}}No active contacts in this segment{{else}}No active contacts yet{{end}}</option>{{end}}{{end}}{{end}}
+
+{{/* editor-fields: the merge-field menu. .Data is []content.MergeField. */}}
+{{define "editor-fields"}}<ul class="merge-items">{{range .Data}}<li><button type="button" data-merge-tag="{{.Name}}">
+  <span class="merge-label">{{.Label}}</span><code>{{.Tag}}</code>
+  <span class="muted small">{{if eq .Name "unsubscribe_url"}}for a link of your own{{else}}{{num .Contacts}} {{if eq .Contacts 1}}contact has{{else}}contacts have{{end}} it{{with .Example}} · e.g. {{truncate 30 .}}{{end}}{{end}}</span>
+</button></li>{{end}}</ul>{{end}}
+
+{{/* editor-media: the image picker. .Data is ui.editorMediaData. */}}
+{{define "editor-media"}}{{with .Data}}{{with .Error}}<p class="error-text" role="alert">{{.}}</p>{{end}}
+{{if .Items}}<div class="media-grid">{{range .Items}}<button type="button" class="media-pick" data-insert-image="{{.URL}}" title="{{.Filename}}"><img src="{{.URL}}" alt="{{.Filename}}" loading="lazy"></button>{{end}}</div>
+{{else}}<p class="muted small">No images uploaded yet.</p>{{end}}
+<div class="row mt-3">
+  <label class="btn btn-sm" for="editor-upload">Upload an image…</label>
+  <input id="editor-upload" class="visually-hidden" type="file" name="file" accept="image/png,image/jpeg,image/gif,image/webp"
+         hx-post="/admin/editor/media" hx-encoding="multipart/form-data" hx-trigger="change" hx-target="closest [data-media-list]" hx-swap="innerHTML" hx-include="this">
+  <span class="htmx-indicator muted small">Uploading…</span>
+  <span class="muted small">PNG, JPEG, GIF or WebP.</span>
+</div>{{end}}{{end}}
+
+{{/* editor-test-result: the answer of the editor's Send test. */}}
+{{define "editor-test-result"}}{{with .Data}}<p class="{{if .OK}}ok-text{{else}}error-text{{end}}" role="{{if .OK}}status{{else}}alert{{end}}">{{.Message}}</p>{{end}}{{end}}
+
+{{/* preview-aside: the preview panel with "Preview as", device switch and
+Send test. dict Me, Audience (follow #f-audience), PreviewURL. It posts
+the enclosing form, which must hold subject, preheader, format and body. */}}
+{{define "preview-aside"}}  <aside class="preview-panel" aria-labelledby="preview-title">
+    <div class="preview-head">
+      <h2 id="preview-title">Preview</h2>
+      <span class="htmx-indicator muted small">Updating…</span>
+      <span class="spacer"></span>
+      <div class="segmented segmented-sm" role="group" aria-label="Device" data-devices hidden>
+        <button type="button" data-device="desktop" aria-pressed="true">Desktop</button>
+        <button type="button" data-device="mobile" aria-pressed="false">Mobile</button>
+      </div>
+    </div>
+    <div class="preview-as">
+      <label for="preview-contact">Preview as</label>
+      <div class="preview-as-row">
+        <button type="button" class="btn btn-sm btn-icon" data-contact-step="-1" aria-label="Previous contact" title="Previous contact">‹</button>
+        <select id="preview-contact" name="preview_contact"
+                hx-get="/admin/editor/contacts" hx-trigger="load{{if .Audience}}, change from:#f-audience{{end}}"
+                {{if .Audience}}hx-include="#f-audience"{{end}} hx-swap="innerHTML" hx-sync="this:replace">
+          <option value="">No contact (fallbacks)</option>
+        </select>
+        <button type="button" class="btn btn-sm btn-icon" data-contact-step="1" aria-label="Next contact" title="Next contact">›</button>
+      </div>
+    </div>
+    <div id="email-preview" class="preview-body" aria-live="polite"
+         hx-post="{{or .PreviewURL "/admin/preview/email"}}"
+         hx-trigger="load, input changed delay:600ms from:closest form, change from:closest form, editor:refresh from:closest form"
+         hx-include="closest form" hx-target="this" hx-swap="innerHTML" hx-sync="this:replace">
+      <p class="muted">The preview appears here.</p>
+    </div>
+    <details class="test-box" data-test-box>
+      <summary><span class="btn btn-sm">Send a test email</span></summary>
+      <div class="test-box-body">
+        <label for="test-to">Send to</label>
+        <input id="test-to" name="test_to" type="text" autocomplete="email" value="{{.Me}}" placeholder="you@example.com">
+        <p class="hint">Up to 5 addresses, separated by commas. It uses the contact chosen under "Preview as" and what you see now, saved or not.</p>
+        <div class="row">
+          <button type="button" class="btn btn-primary btn-sm" hx-post="/admin/editor/test" hx-include="closest form" hx-target="#editor-test-result" hx-swap="innerHTML" hx-disabled-elt="this">Send test</button>
+          <span class="htmx-indicator muted small">Sending…</span>
+        </div>
+        <div id="editor-test-result" aria-live="polite"></div>
+      </div>
+    </details>
+  </aside>
+{{end}}
+
+{{/* saved-preview: preview-aside for stored content (a broadcast's page):
+its own form with the content as hidden fields. dict B (broadcasts.Broadcast), Me, FromName (its own, "" = default), ReplyTo (the one it uses, "" = none). */}}
+{{define "saved-preview"}}<form class="saved-preview" data-preview-root novalidate>
+  <input type="hidden" name="subject" value="{{.B.Email.Subject}}">
+  <input type="hidden" name="preheader" value="{{.B.Email.Preheader}}">
+  <input type="hidden" name="format" value="{{.B.Email.Format}}">
+  <input type="hidden" name="body" value="{{.B.Email.Body}}">
+  {{with .FromName}}<input type="hidden" name="from_name" value="{{.}}">{{end}}
+  {{if .ReplyTo}}<input type="hidden" name="reply_to" value="{{.ReplyTo}}">{{else}}<input type="hidden" name="no_reply_to" value="1">{{end}}
+  <input type="hidden" id="f-audience" name="audience" value="{{if eq .B.Audience.Type "segment"}}segment:{{.B.Audience.SegmentID}}{{else}}all{{end}}">
+  {{template "preview-aside" (dict "Me" .Me "Audience" true)}}
+</form>{{end}}

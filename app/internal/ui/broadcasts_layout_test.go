@@ -12,12 +12,12 @@ func Test_broadcasts_layoutEditor(t *testing.T) {
 
 	page := c.get("/admin/layout").want(t, http.StatusOK)
 	page.contains(t, "<h1>Base layout</h1>", `value="#2563eb"`, "Example Ltd, 1 Street, Town", `hx-post="/admin/layout/preview"`,
-		`aria-current="page">Content`, `aria-current="page">Base layout`)
+		`aria-current="page">Emails`, `aria-current="page">Base layout`)
 	ver := page.field(t, "version")
 
 	// Live preview: sample content in the unsaved layout, sandboxed.
 	c.htmx(http.MethodPost, "/admin/layout/preview", url.Values{"brand_color": {"#aa0000"}, "logo_url": {"https://cdn.example.com/logo.png"}}).
-		want(t, http.StatusOK).contains(t, `<iframe class="preview-frame"`, `sandbox=""`, "#aa0000", "logo.png", "Your headline").lacks(t, "<html")
+		want(t, http.StatusOK).contains(t, `<iframe class="preview-frame"`, `sandbox="allow-same-origin"`, "#aa0000", "logo.png", "Your headline").lacks(t, "<html")
 	c.htmx(http.MethodPost, "/admin/layout/preview", url.Values{"brand_color": {"red"}}).
 		want(t, http.StatusOK).contains(t, "preview-error", "brand_color: must be a colour like #1a2b3c")
 	c.htmx(http.MethodPost, "/admin/layout/preview", url.Values{"custom_html": {"<html><body>{{content}}</body></html>"}}).

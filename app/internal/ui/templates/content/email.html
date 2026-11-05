@@ -31,25 +31,13 @@ ui.emailPageData. */}}
   <section class="card" aria-labelledby="content-title">
     <h2 id="content-title">Content</h2>
     {{template "field" (dict "Form" .Form "Name" "name" "Label" "Name" "Optional" true "Autocomplete" "off" "Hint" "Only you see this, e.g. Welcome 1. Lists show the subject when it is empty.")}}
-    {{template "email-editor" (dict "Form" .Form)}}
+    {{template "email-editor" (dict "Form" .Form "Me" $.Session.Email)}}
   </section>
-  <div class="form-actions">
+  <div class="form-actions sticky-actions">
     {{if not .Locked}}<button class="btn btn-primary" type="submit">{{if .Email}}Save changes{{else}}Save email{{end}}</button>{{end}}
     <a class="btn" href="/admin/emails">{{if .Locked}}Back{{else}}Cancel{{end}}</a>
     <span class="muted small">Nothing is sent when you save.</span>
   </div>
 </form>
 
-{{with .Email}}
-<section class="card mt-5" aria-labelledby="test-title">
-  <h2 id="test-title">Send a test</h2>
-  <form method="post" action="/admin/emails/{{.ID}}/test" novalidate>
-    {{template "csrf" $}}
-    {{template "form-error" $.Data.TestForm}}
-    {{template "textarea-field" (dict "Form" $.Data.TestForm "Name" "to" "Label" "Send to" "Optional" true "Rows" 2 "Placeholder" $.Data.Owner "Hint" (printf "Up to 5 addresses, separated by commas or new lines. Leave empty to send it to the owner's address (%s). Addresses that unsubscribed, bounced or are suppressed are skipped." (or $.Data.Owner "none set")))}}
-    {{template "field" (dict "Form" $.Data.TestForm "Name" "contact" "Label" "Use the data of contact" "Optional" true "Autocomplete" "off" "Placeholder" "e.g. anna@example.org" "Hint" "A contact's email address (or ID): merge fields show this contact's name and attributes. Leave empty to show the fallbacks.")}}
-    <div class="form-actions"><button class="btn" type="submit">Send test</button><span class="muted small">This sends the saved version.</span></div>
-  </form>
-</section>
-{{end}}
 {{end}}{{end}}

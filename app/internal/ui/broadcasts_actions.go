@@ -19,7 +19,7 @@ func (u *UI) registerBroadcastActions() {
 	post := http.MethodPost
 	p := broadcastsPath + "/{id}"
 	u.handle(Action{Method: post, Path: p + "/test", OperationID: "send-broadcast-test", Uses: []string{"list-contacts", "get-contact"}, Handler: u.broadcastTest})
-	u.handle(Action{Method: post, Path: p + "/schedule", OperationID: "schedule-broadcast", Handler: u.broadcastSchedule})
+	u.handle(Action{Method: post, Path: p + "/schedule", OperationID: "schedule-broadcast", Uses: []string{"send-broadcast"}, Handler: u.broadcastSchedule})
 	u.handle(Action{Method: post, Path: p + "/unschedule", OperationID: "unschedule-broadcast", Handler: u.broadcastUnschedule})
 	u.handle(Action{Method: post, Path: p + "/send", OperationID: "send-broadcast", Handler: u.broadcastSend})
 	u.handle(Action{Method: post, Path: p + "/pause", OperationID: "pause-broadcast", Handler: u.broadcastPause})
@@ -105,10 +105,12 @@ func (u *UI) broadcastTest(w http.ResponseWriter, r *http.Request) error {
 		if failBroadcastForm(f, err) == 0 {
 			return err
 		}
-	} else if f.Message == "" {
-		f.Message = "Please correct the highlighted field."
 	}
-	return u.renderBroadcast(w, r, http.StatusUnprocessableEntity, id, func(d *broadcastShowData) { d.TestForm = f })
+	// The page's test box is the editor's (send-test-draft); this API-parity
+	// action reports its problems as a flash.
+	u.Flash(r, FlashError, "The test was not sent: "+formProblem(f))
+	u.Redirect(w, r, broadcastURL(id))
+	return nil
 }
 
 // broadcastSchedule schedules a draft at a local date and time in the
@@ -120,6 +122,38 @@ func (u *UI) broadcastSchedule(w http.ResponseWriter, r *http.Request) error {
 	}
 	f := NewForm(r)
 	at, err := u.ParseInputTime("at", f.Get("at"))
+	if err == nil && !Confirmed(r) {
+		// Like Send now: confirm with the exact number of recipients first
+		// (the send dry run checks the audience, sender and footer too).
+		if !at.After(u.clock.Now()) {
+			err = fieldError("at", "must be in the future")
+		} else {
+			var res broadcasts.BroadcastSendResult
+			if res, err = u.d.Broadcasts.Send(r.Context(), id, formVersion(f), true); err == nil {
+				b := res.Broadcast
+				subject, warnings, err := u.confirmFacts(r.Context(), b)
+				if err != nil {
+					return err
+				}
+				details := append([]string{
+					plural(int(res.Recipients), "recipient", "recipients") + " right now: " + recipientsLabel(b.Audience) +
+						". Who gets it is decided when it starts, so contacts who join before then get it too.",
+					subject,
+				}, warnings...)
+				if res.Recipients == 0 {
+					details = append(details, "Nobody would receive it right now. Check the audience.")
+				}
+				return u.RenderConfirm(w, r, Confirm{
+					Title:   fmt.Sprintf("Schedule %s for %s?", b.Name, u.fmtTime(&at)),
+					Message: fmt.Sprintf("It starts by itself at %s (%s). Until then you can still edit or unschedule it.", u.fmtTime(&at), u.location().String()),
+					Details: details, Action: broadcastURL(id) + "/schedule", Fields: f.Values,
+					ConfirmLabel: "Schedule for " + plural(int(res.Recipients), "recipient", "recipients"),
+					CancelURL:    broadcastURL(id), Nav: "broadcasts",
+					Crumbs: []Crumb{{"Broadcasts", broadcastsPath}, {b.Name, broadcastURL(id)}},
+				})
+			}
+		}
+	}
 	if err == nil {
 		var b broadcasts.Broadcast
 		if b, err = u.d.Broadcasts.Schedule(r.Context(), id, at, formVersion(f)); err == nil {
@@ -161,10 +195,14 @@ func (u *UI) broadcastSend(w http.ResponseWriter, r *http.Request) error {
 			return u.broadcastActionFailed(w, r, id, err)
 		}
 		b := res.Broadcast
-		details := []string{
-			plural(int(res.Recipients), "recipient", "recipients") + ": " + recipientsLabel(b.Audience),
-			"Subject: " + b.Email.Subject,
+		subject, warnings, err := u.confirmFacts(ctx, b)
+		if err != nil {
+			return err
 		}
+		details := append([]string{
+			plural(int(res.Recipients), "recipient", "recipients") + ": " + recipientsLabel(b.Audience),
+			subject,
+		}, warnings...)
 		if len(res.MissingTags) > 0 {
 			details = append(details, "Warning: the segment refers to tags that don't exist ("+strings.Join(res.MissingTags, ", ")+
 				"). Rules on them match nobody (or everybody, for \"doesn't have\"). Check the segment before you send.")
@@ -173,6 +211,9 @@ func (u *UI) broadcastSend(w http.ResponseWriter, r *http.Request) error {
 			details = append(details, "Nobody would receive it. Check the audience.")
 		}
 		label := "Send now to " + plural(int(res.Recipients), "recipient", "recipients")
+		if len(warnings) > 0 {
+			label = "Send anyway to " + plural(int(res.Recipients), "recipient", "recipients")
+		}
 		return u.RenderConfirm(w, r, Confirm{
 			Title:   "Send " + b.Name + " now?",
 			Message: "Sending starts right away and can't be undone. You can pause it while it sends; contacts who unsubscribe or bounce before their email goes out are skipped.",

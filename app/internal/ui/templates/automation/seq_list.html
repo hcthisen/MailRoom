@@ -21,7 +21,7 @@
       {{range .Items}}
       <tr>
         <td><a href="/admin/sequences/{{.Seq.ID}}">{{.Seq.Name}}</a>{{with .Window}}<br><span class="muted small">Sends {{.}}</span>{{end}}</td>
-        <td>{{badge "" .Seq.Status}}</td>
+        <td>{{if eq .Seq.Status "active"}}<span class="onoff onoff-sm is-on">On</span>{{else}}<span class="onoff onoff-sm is-off">Off</span>{{end}}</td>
         <td>{{with .Seq.TriggerTag}}tag <span class="tag">{{.}}</span>{{else}}<span class="muted">forms, imports or by hand</span>{{end}}</td>
         <td class="num">{{len .Seq.Steps}}</td>
         {{if .StatsErr}}<td class="num muted" colspan="3">unavailable</td>{{else}}

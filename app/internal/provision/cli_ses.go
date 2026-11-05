@@ -24,6 +24,7 @@ func (c *CLI) provisionSES(ctx context.Context, args []string, stdout, stderr io
 	fs := newFlags("provision ses", stderr)
 	envFile := fs.String("env-file", DefaultEnvFile, "server env file to write the sending user's keys to")
 	noBucket := fs.Bool("no-backup-bucket", false, "do not create the S3 backup bucket")
+	noReceive := fs.Bool("no-receive", false, "do not set up receiving email (it is also skipped when DOMAIN already receives mail elsewhere)")
 	rotate := fs.Bool("rotate-keys", false, "replace the sending user's access key (new key, env file, then delete the old one)")
 	requestProd := fs.Bool("request-production", false, "submit the SES production access request instead of provisioning")
 	useCase := fs.String("use-case", "", "file with the reviewed production access text (with --request-production)")
@@ -54,6 +55,7 @@ func (c *CLI) provisionSES(ctx context.Context, args []string, stdout, stderr io
 		ConfigurationSet:  env.ConfigurationSet,
 		EnvFile:           *envFile,
 		BackupBucket:      !*noBucket,
+		Receive:           !*noReceive,
 		RotateKeys:        *rotate,
 	}
 	if !*jsonOut {
@@ -92,6 +94,12 @@ func printSESSummary(w io.Writer, res Result, env installEnv) {
 	fmt.Fprintf(w, "Configuration set: %s\n", res.ConfigurationSet)
 	if res.BackupBucket != "" {
 		fmt.Fprintf(w, "Backup bucket:     %s\n", res.BackupBucket)
+	}
+	if res.InboundDomain != "" {
+		fmt.Fprintf(w, "Receiving:         on, mail to *@%s is stored in %s and shown in Mailroom's Inbox\n", res.InboundDomain, res.InboundBucket)
+		fmt.Fprintf(w, "                   once the MX record below exists (it sends all mail for %s to Mailroom).\n", res.InboundDomain)
+	} else {
+		fmt.Fprintln(w, "Receiving:         off")
 	}
 	fmt.Fprintf(w, "\nDNS records needed:\n\n")
 	_ = WriteRecordsTable(w, res.Records)

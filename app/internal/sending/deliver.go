@@ -95,7 +95,7 @@ func (s *Service) deliver(ctx context.Context, id int64) error {
 		return s.markSkipped(ctx, id, reason)
 	}
 	to := m.ToEmail
-	if contact != nil && m.Kind != core.KindTest {
+	if contact != nil && m.Kind != core.KindTest && m.Kind != core.KindReply {
 		to = contact.Email // the contact's current address
 	}
 
@@ -151,6 +151,20 @@ func (s *Service) deliver(ctx context.Context, id int64) error {
 	if marketing {
 		mm.ListUnsubscribe = rendered.UnsubscribeURL
 	}
+	switch m.Kind {
+	case core.KindAlert:
+		mm.AutoSubmitted = true
+	case core.KindReply:
+		mm.FeedbackID = ""
+		mm.InReplyTo, _ = m.Data[core.DataReplyInReplyTo].(string)
+		if refs, ok := m.Data[core.DataReplyReferences].([]any); ok {
+			for _, r := range refs {
+				if s, ok := r.(string); ok {
+					mm.References = append(mm.References, s)
+				}
+			}
+		}
+	}
 	raw, err := buildMIME(mm)
 	if err != nil {
 		return s.markFailed(ctx, m, rendered.Subject, "mime", err.Error())
@@ -165,7 +179,7 @@ func (s *Service) deliver(ctx context.Context, id int64) error {
 	if reason != "" {
 		return s.markSkipped(ctx, id, reason)
 	}
-	if latest != nil && m.Kind != core.KindTest && latest.Email != to {
+	if latest != nil && m.Kind != core.KindTest && m.Kind != core.KindReply && latest.Email != to {
 		// The address changed while we rendered: render again for the new one.
 		return s.retryLater(ctx, id, errors.New("contact address changed during send"))
 	}

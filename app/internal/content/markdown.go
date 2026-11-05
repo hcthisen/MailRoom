@@ -74,6 +74,9 @@ func inlineStyles(src, brandColor string) string {
 		}
 		tok := z.Token()
 		style, ok := contentStyles[tok.DataAtom]
+		if tok.DataAtom == atom.A && hasClass(tok, ButtonClass) {
+			style, ok = buttonStyle, true
+		}
 		if !ok {
 			b.Write(raw)
 			continue
@@ -84,6 +87,60 @@ func inlineStyles(src, brandColor string) string {
 		setStyle(&tok, style)
 		b.WriteString(tok.String())
 	}
+}
+
+// ButtonClass marks a link the visual editor inserted as a button; it is
+// styled with the layout's brand colour (buttonStyle).
+const ButtonClass = "mr-button"
+
+// buttonStyle is the inline style of a ButtonClass link ("%s" = brand colour).
+const buttonStyle = "display:inline-block;background:%s;color:#ffffff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;"
+
+// VisualMarker starts an HTML body made in the visual editor. Such a body
+// gets the same inline styles as Markdown output (IsVisualBody); other
+// HTML (e.g. pasted from GHL) is used exactly as written.
+const VisualMarker = "<!-- mailroom:visual -->"
+
+// IsVisualBody reports whether an HTML body was made in the visual editor.
+func IsVisualBody(body string) bool {
+	return strings.HasPrefix(strings.TrimLeft(body, " \t\r\n"), VisualMarker)
+}
+
+// hasClass reports whether tok has class c.
+func hasClass(tok html.Token, c string) bool {
+	for _, a := range tok.Attr {
+		if a.Namespace == "" && strings.EqualFold(a.Key, "class") {
+			for _, f := range strings.Fields(a.Val) {
+				if f == c {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// MarkdownToHTMLBody converts a Markdown email body to an HTML body for
+// the visual editor (VisualMarker first), keeping its merge fields as
+// they were written. It is how the editor switches from Markdown to the
+// visual editor without losing the content.
+func (s *Service) MarkdownToHTMLBody(body string) (string, error) {
+	t, err := parseMerge("body", body, emailVocabulary)
+	if err != nil {
+		return "", err
+	}
+	src, ph := t.placeholders(body)
+	out, err := s.markdownToHTML(src)
+	if err != nil {
+		return "", err
+	}
+	out = ph.replace(out, func(f *mergeField) string {
+		if f.Fallback == "" {
+			return html.EscapeString("{{" + f.Name + "}}")
+		}
+		return html.EscapeString("{{" + f.Name + ` | "` + f.Fallback + `"}}`)
+	})
+	return VisualMarker + "\n" + out, nil
 }
 
 // setStyle prepends style to tok's style attribute (adding one if needed).

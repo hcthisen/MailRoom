@@ -32,7 +32,10 @@ const (
 //     contact with that address, if there is one, must be active or
 //     pending (core.CanReceive): a test never reaches an address that
 //     unsubscribed, bounced, complained or was suppressed (PRD goal 3);
-//   - alert: never suppressed.
+//   - alert: never suppressed;
+//   - reply: like test, the address must not be in the suppressions table,
+//     and the contact with that address, if any, must not have bounced or
+//     complained (core.CanReceive).
 //
 // It returns the contact for contact messages (and for tests tied to a
 // contact, for merge fields) and a skip reason, "" when the message may
@@ -41,6 +44,23 @@ func (s *Service) eligibility(ctx context.Context, m message) (*core.Contact, st
 	q := s.db.Read
 	switch m.Kind {
 	case core.KindAlert:
+		return nil, "", nil
+	case core.KindReply:
+		if m.ToEmail == "" {
+			return nil, SkipNoAddress, nil
+		}
+		sup, err := s.contacts.IsSuppressed(ctx, q, m.ToEmail)
+		if err != nil || sup {
+			return nil, reasonIf(sup, SkipSuppressed), err
+		}
+		recipient, err := s.contacts.GetByEmail(ctx, q, m.ToEmail)
+		switch {
+		case errors.Is(err, core.ErrNotFound), errors.Is(err, core.ErrValidation):
+		case err != nil:
+			return nil, "", err
+		case !core.CanReceive(recipient.Status, m.Kind):
+			return nil, "contact status is " + string(recipient.Status), nil
+		}
 		return nil, "", nil
 	case core.KindTest:
 		if m.ToEmail == "" {

@@ -41,7 +41,7 @@ func (u *UI) registerSequences() {
 	u.handle(Action{Method: http.MethodPost, Path: seqPath + "/{id}", OperationID: "update-sequence", Handler: u.seqUpdate})
 	u.handle(Action{Method: http.MethodPost, Path: seqPath + "/{id}/pause", OperationID: "pause-sequence",
 		Handler: u.seqSetStatus(sequences.StatusPaused)})
-	u.handle(Action{Method: http.MethodPost, Path: seqPath + "/{id}/resume", OperationID: "resume-sequence",
+	u.handle(Action{Method: http.MethodPost, Path: seqPath + "/{id}/resume", OperationID: "resume-sequence", Uses: []string{"get-sequence"},
 		Handler: u.seqSetStatus(sequences.StatusActive)})
 	u.handle(Action{Method: http.MethodPost, Path: seqPath + "/{id}/delete", OperationID: "delete-sequence",
 		Uses: []string{"get-sequence", "get-sequence-stats"}, Handler: u.seqDelete})
@@ -118,8 +118,8 @@ var seqReentryOptions = []Option{
 }
 
 var seqStatusOptions = []Option{
-	{sequences.StatusActive, "Active: steps are sent"},
-	{sequences.StatusPaused, "Paused: nothing is sent, enrolments are still accepted"},
+	{sequences.StatusActive, "On: emails are sent"},
+	{sequences.StatusPaused, "Off: nothing is sent, contacts can still be enrolled"},
 }
 
 // seqFormView renders the create or settings form.
@@ -211,7 +211,7 @@ func seqFieldNames(tags []string) func(string, string) (string, string) {
 
 // seqNew is the empty create form.
 func (u *UI) seqNew(w http.ResponseWriter, r *http.Request) error {
-	f := seqFormValues(sequences.Sequence{Status: sequences.StatusActive, Reentry: sequences.ReentryNever})
+	f := seqFormValues(sequences.Sequence{Status: sequences.StatusPaused, Reentry: sequences.ReentryNever})
 	f.Values.Del("version")
 	f.Values.Del("send_window.own")
 	return u.seqFormView(w, r, http.StatusOK, f, nil)
@@ -374,14 +374,48 @@ func (u *UI) seqSetStatus(status string) HandlerFunc {
 			return err
 		}
 		f := NewForm(r)
+		if status == sequences.StatusActive && !Confirmed(r) {
+			// Switching a drip on starts real emails: say what will happen.
+			cur, err := u.d.Sequences.Get(r.Context(), id)
+			if err != nil {
+				return err
+			}
+			trigger := "No tag starts it: contacts join through a form, an import or by hand."
+			if cur.TriggerTag != nil && *cur.TriggerTag != "" {
+				trigger = fmt.Sprintf("Every active contact who gets the tag %q from now on is enrolled.", *cur.TriggerTag)
+			}
+			details := []string{trigger}
+			if len(cur.Steps) == 0 {
+				details = append(details, "It has no emails yet, so nothing would be sent. Add a step first.")
+			}
+			for _, st := range cur.Steps {
+				when := "right after enrolment"
+				if st.DelaySeconds > 0 {
+					when = "wait " + st.Delay
+					if st.Position > 1 {
+						when += " after the previous email"
+					} else {
+						when += " after enrolment"
+					}
+				}
+				details = append(details, fmt.Sprintf("Email %d (%s): %s", st.Position, when, st.Subject))
+			}
+			return u.RenderConfirm(w, r, Confirm{
+				Title:   fmt.Sprintf("Turn on %s?", cur.Name),
+				Message: "Once it is on, its emails go out to the contacts in it as each step falls due. Contacts already enrolled continue where they are. You can pause it again at any time.",
+				Details: details, Action: seqURL(id, "") + "/resume", Fields: f.Values,
+				ConfirmLabel: "Turn on sequence", CancelURL: seqURL(id, ""), Nav: "sequences",
+				Crumbs: []Crumb{{"Sequences", seqPath}, {cur.Name, seqURL(id, "")}},
+			})
+		}
 		seq, err := u.d.Sequences.SetStatus(r.Context(), id, status, autoVersion(f))
 		if err != nil {
 			return err
 		}
 		if status == sequences.StatusPaused {
-			u.Flash(r, FlashSuccess, fmt.Sprintf("%q is paused. Nothing is sent until you resume it; enrolments are still accepted.", seq.Name))
+			u.Flash(r, FlashSuccess, fmt.Sprintf("%q is off. Nothing is sent until you switch it on again; contacts can still be enrolled.", seq.Name))
 		} else {
-			u.Flash(r, FlashSuccess, fmt.Sprintf("%q is active again. Steps that fell due meanwhile go out at the next scheduler run.", seq.Name))
+			u.Flash(r, FlashSuccess, fmt.Sprintf("%q is on. Steps that are due go out at the next scheduler run (within a minute).", seq.Name))
 		}
 		u.Redirect(w, r, seqURL(id, ""))
 		return nil

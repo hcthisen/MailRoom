@@ -7,7 +7,8 @@
   {{template "form-error" $f}}
 
   {{template "field" (dict "Form" $f "Name" "name" "Label" "Name" "Required" true "Hint" "Unique; shown in lists and in each step email's internal name.")}}
-  {{template "select-field" (dict "Form" $f "Name" "status" "Label" "Status" "Options" .Status)}}
+  {{if .Seq}}{{template "select-field" (dict "Form" $f "Name" "status" "Label" "Status" "Options" .Status)}}{{else}}<input type="hidden" name="status" value="paused">
+  <p class="hint mb-4">New sequences start <strong>off</strong>: nothing is sent until you add the emails and switch it on.</p>{{end}}
 
   <h2>Start and stop</h2>
   {{template "tag-input" (dict "Form" $f "Name" "trigger_tag" "Label" "Trigger tag" "Optional" true "Suggestions" .Tags "Placeholder" "e.g. joined-community" "Hint" "Adding this tag to an active contact enrols it. Leave empty for sequences started by a form, an import or by hand. Created if it doesn't exist.")}}

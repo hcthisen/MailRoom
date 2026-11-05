@@ -3,6 +3,7 @@ package provision
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"slices"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	sesv1types "github.com/aws/aws-sdk-go-v2/service/ses/types"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
 	sestypes "github.com/aws/aws-sdk-go-v2/service/sesv2/types"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
@@ -48,6 +50,12 @@ type fakeAWS struct {
 
 	buckets map[string]*fakeBucket
 
+	// SES v1 receipt rules and DOMAIN's MX records (receiving).
+	ruleSets      map[string][]sesv1types.ReceiptRule
+	activeRuleSet string
+	mx            []*net.MX
+	mxErr         error
+
 	// calls records every operation; mutations records the writing ones
 	// that were allowed; denied records the actions the allowlist refused.
 	calls, mutations, denied []string
@@ -68,6 +76,7 @@ type fakeBucket struct {
 	enc        *s3types.ServerSideEncryptionConfiguration
 	lifecycle  []s3types.LifecycleRule
 	versioning s3types.BucketVersioningStatus
+	policy     string
 }
 
 func newFakeAWS() *fakeAWS {
@@ -81,13 +90,14 @@ func newFakeAWS() *fakeAWS {
 		policies:   map[string]string{},
 		secrets:    map[string]string{},
 		buckets:    map[string]*fakeBucket{},
+		ruleSets:   map[string][]sesv1types.ReceiptRule{},
 		failOn:     map[string]error{},
 		now:        time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC),
 	}
 }
 
 func (f *fakeAWS) clients() Clients {
-	return Clients{STS: f, SES: f, SNS: f, IAM: f, S3: f, Region: f.region}
+	return Clients{STS: f, SES: f, SNS: f, IAM: f, S3: f, Receipt: f, Resolver: f, Region: f.region}
 }
 
 // op records a call and applies failOn and the allowlist. extra are IAM
@@ -131,6 +141,8 @@ var fakeIAMActions = map[string]string{
 	"PutBucketLifecycleConfiguration": "s3:PutLifecycleConfiguration",
 	"GetBucketVersioning":             "s3:GetBucketVersioning",
 	"PutBucketVersioning":             "s3:PutBucketVersioning",
+	"GetBucketPolicy":                 "s3:GetBucketPolicy",
+	"PutBucketPolicy":                 "s3:PutBucketPolicy",
 	"GetUser":                         "iam:GetUser",
 	"CreateUser":                      "iam:CreateUser",
 	"GetUserPolicy":                   "iam:GetUserPolicy",
@@ -709,4 +721,7 @@ var (
 	_ SNSAPI = (*fakeAWS)(nil)
 	_ IAMAPI = (*fakeAWS)(nil)
 	_ S3API  = (*fakeAWS)(nil)
+
+	_ SESReceiptAPI = (*fakeAWS)(nil)
+	_ MXResolver    = (*fakeAWS)(nil)
 )

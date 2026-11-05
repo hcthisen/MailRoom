@@ -146,7 +146,9 @@ func audCreateStatuses() []Option {
 // audContactNew is the empty create form (its tag suggestions come from
 // list-tags).
 func (u *UI) audContactNew(w http.ResponseWriter, r *http.Request) error {
-	return u.Page(w, r, "audience/contact_form", u.audContactFormView(r, EmptyForm().Set("status", "active")))
+	// ?email= prefills the address (the Inbox's "Add as contact").
+	return u.Page(w, r, "audience/contact_form", u.audContactFormView(r,
+		EmptyForm().Set("status", "active").Set("email", r.URL.Query().Get("email"))))
 }
 
 // audContactCreate creates a contact (create-contact).

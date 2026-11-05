@@ -2,7 +2,7 @@
 {{define "actions"}}{{with .Data}}{{with .Step}}{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/sequences/%d/steps/%d/delete" $.Data.Seq.ID .ID) "Label" "Delete step…" "Class" "btn-danger" "Fields" (dict "version" (printf "%d" $.Data.Seq.Version)))}}{{end}}{{end}}{{end}}
 
 {{define "content"}}{{with .Data}}{{$f := .Form}}{{$seq := .Seq}}
-<form class="form" method="post" action="{{with .Step}}/admin/sequences/{{$seq.ID}}/steps/{{.ID}}{{else}}/admin/sequences/{{$seq.ID}}/steps{{end}}" novalidate>
+<form method="post" action="{{with .Step}}/admin/sequences/{{$seq.ID}}/steps/{{.ID}}{{else}}/admin/sequences/{{$seq.ID}}/steps{{end}}" novalidate>
   {{template "csrf" $}}
   <input type="hidden" name="version" value="{{$f.Get "version"}}">
   {{template "form-error" $f}}
@@ -21,26 +21,17 @@
   <section class="card" aria-labelledby="email-title">
     <h2 id="email-title">Email</h2>
     {{with .Step}}<p class="hint">Edits apply to emails not sent yet. If another step or a broadcast uses the same email, it changes there too.</p>{{end}}
-    {{template "email-editor" (dict "Form" $f)}}
+    {{template "email-editor" (dict "Form" $f "Me" $.Session.Email)}}
   </section>
 
-  <div class="form-actions">
+  <div class="form-actions sticky-actions">
     <button class="btn btn-primary" type="submit">{{if .Step}}Save step{{else}}Add step{{end}}</button>
     <a class="btn" href="/admin/sequences/{{$seq.ID}}#steps">Cancel</a>
   </div>
 </form>
 
-{{with .Step}}{{$tf := $.Data.TestForm}}
-<div class="grid grid-2">
-  <section class="card" aria-labelledby="test-title">
-    <h2 id="test-title">Send a test</h2>
-    <form class="form" method="post" action="/admin/sequences/{{$seq.ID}}/steps/{{.ID}}/test" novalidate>
-      {{template "csrf" $}}
-      {{template "form-error" $tf}}
-      {{template "field" (dict "Form" $tf "Name" "to" "Label" "Send to" "Type" "text" "Optional" true "Autocomplete" "email" "Placeholder" (or $.Data.Owner "owner@example.com") "Hint" (printf "Up to 5 addresses, separated by commas. Leave empty to send to the owner's address%s. Merge fields use their fallbacks; the saved version is sent." (or (and $.Data.Owner (printf " (%s)" $.Data.Owner)) "")))}}
-      <div class="form-actions"><button class="btn" type="submit">Send test</button></div>
-    </form>
-  </section>
+{{with .Step}}
+<div class="grid grid-2 mt-5">
   {{with $.Data.Stats}}<section class="card" aria-labelledby="stepstats-title">
     <h2 id="stepstats-title">This step so far</h2>
     <dl class="props">

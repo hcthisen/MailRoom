@@ -22,7 +22,7 @@ func TestDashboard(t *testing.T) {
 		"<h1>Dashboard</h1>", `aria-current="page">Dashboard`,
 		"New contacts, 7 days", `<p class="value">3</p>`, "of 3 in total",
 		"Emails sent this month", "Bounce rate, 30 days", "Complaint rate, 30 days",
-		"SES is not configured yet", // offline: no AWS
+		"Email sending isn&#39;t connected yet", // offline: no AWS
 		"The install checks have not run yet")
 	r.lacks(t, "Sending is paused")
 

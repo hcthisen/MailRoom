@@ -55,7 +55,7 @@ func TestAudienceContactCreateAndList(t *testing.T) {
 	}
 	c.get(fmt.Sprintf("/admin/contacts/%d", id)).want(t, http.StatusOK).
 		contains(t, "Contact ann@example.org created.", "<h1>ann@example.org</h1>", "Ann Berg", "company", "Acme",
-			`<span class="tag">`, "Timeline", "Not in any sequence")
+			`<span class="tl-type tl-consent">Consent</span>`, "Timeline", "Not in any sequence")
 
 	// Validation and conflicts are shown on the form.
 	c.post("/admin/contacts", url.Values{"email": {"not-an-email"}}).want(t, http.StatusUnprocessableEntity).

@@ -43,6 +43,10 @@ type SESInput struct {
 	EnvFile string
 	// BackupBucket creates and configures the S3 backup bucket.
 	BackupBucket bool
+	// Receive sets up receiving (N-1) unless DOMAIN already receives mail
+	// elsewhere; see receiveCheck. "provision ses" turns it on unless
+	// --no-receive is given.
+	Receive bool
 	// RotateKeys replaces the sending user's access key: a new key is
 	// created and written to the env file, then the old keys are deleted.
 	RotateKeys bool
@@ -52,14 +56,17 @@ type SESInput struct {
 
 // Result is the outcome of ProvisionSES. Secrets are never part of it.
 type Result struct {
-	AccountID               string   `json:"account_id"`
-	Region                  string   `json:"region"`
-	Domain                  string   `json:"domain"`
-	IdentityARN             string   `json:"identity_arn"`
-	ConfigurationSet        string   `json:"configuration_set"`
-	ConfigurationSetARN     string   `json:"configuration_set_arn"`
-	TopicARN                string   `json:"topic_arn"`
-	BackupBucket            string   `json:"backup_bucket,omitempty"`
+	AccountID           string `json:"account_id"`
+	Region              string `json:"region"`
+	Domain              string `json:"domain"`
+	IdentityARN         string `json:"identity_arn"`
+	ConfigurationSet    string `json:"configuration_set"`
+	ConfigurationSetARN string `json:"configuration_set_arn"`
+	TopicARN            string `json:"topic_arn"`
+	BackupBucket        string `json:"backup_bucket,omitempty"`
+	// InboundDomain and InboundBucket are set when receiving is on.
+	InboundDomain           string   `json:"inbound_domain,omitempty"`
+	InboundBucket           string   `json:"inbound_bucket,omitempty"`
 	IAMUser                 string   `json:"iam_user"`
 	AccessKeyID             string   `json:"access_key_id,omitempty"`
 	EnvFile                 string   `json:"env_file"`
@@ -91,6 +98,9 @@ type run struct {
 
 	ident      *sesv2.GetEmailIdentityOutput // the identity as found (zero when just created)
 	bucketName string                        // the backup bucket, "" when disabled
+
+	receive       bool // receiving is set up in this run (receiveCheck)
+	ruleSetActive bool // the mailroom receipt rule set is the active one
 }
 
 func (r *run) step(name string, a Action, detail string) {
@@ -151,6 +161,7 @@ func (p *Provisioner) ProvisionSES(ctx context.Context, in SESInput) (Result, er
 func (r *run) provision(ctx context.Context) error {
 	for _, f := range []func(context.Context) error{
 		r.callerIdentity,
+		r.receiveCheck,
 		r.identity,
 		r.suppression,
 		r.configurationSet,
@@ -158,6 +169,7 @@ func (r *run) provision(ctx context.Context) error {
 		r.eventDestination,
 		r.identityConfigurationSet,
 		r.bucket,
+		r.inbound,
 		r.iamUser,
 		r.iamPolicy,
 		r.accessKeyAndEnv,
@@ -256,8 +268,13 @@ func (r *run) finalState(ctx context.Context) error {
 	if !acct.SendingEnabled {
 		r.res.Warnings = append(r.res.Warnings, "sending is disabled for this SES account")
 	}
+	inboundDomain := ""
+	if r.receive {
+		inboundDomain = r.in.Domain
+	}
 	r.res.Records = Records(RecordsInput{
 		Domain:            r.in.Domain,
+		InboundDomain:     inboundDomain,
 		MailFromSubdomain: r.in.MailFromSubdomain,
 		Region:            r.c.Region,
 		DKIMTokens:        tokens,

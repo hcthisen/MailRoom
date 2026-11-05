@@ -65,7 +65,7 @@ func TestTimeline(t *testing.T) {
 		"click":         "Clicked https://example.com/a",
 		"tag_added":     "Tag added: vip",
 		"message":       "Broadcast email queued: May news",
-		"consent":       "Consent (api) from api:setup-agent",
+		"consent":       "Consent: added through the API (setup-agent)",
 	}
 	for typ, summary := range checks {
 		if byType[typ].Summary != summary {

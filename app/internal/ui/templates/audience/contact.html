@@ -2,8 +2,10 @@
 and erase. .Data is ui.audContactData. */}}
 {{define "actions"}}{{with .Data}}
 <a class="btn" href="/admin/contacts/{{.C.ID}}/edit">Edit</a>
-<a class="btn" href="/admin/contacts/{{.C.ID}}/export" download>Export data</a>
-{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/contacts/%d/erase" .C.ID) "Label" "Erase…" "Class" "btn-danger" "Fields" (dict "version" (printf "%d" .C.Version)))}}
+<details class="menu"><summary class="btn btn-icon" aria-label="More actions" title="More actions">⋯</summary><div class="menu-items">
+<a class="btn menu-item" href="/admin/contacts/{{.C.ID}}/export" download>Export their data (GDPR)</a>
+{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/contacts/%d/erase" .C.ID) "Label" "Erase contact…" "Class" "menu-item is-danger" "Fields" (dict "version" (printf "%d" .C.Version)))}}
+</div></details>
 {{end}}{{end}}
 
 {{define "content"}}{{with .Data}}
@@ -16,14 +18,16 @@ and erase. .Data is ui.audContactData. */}}
       <dt>Created</dt><dd>{{fmtTime .C.CreatedAt}}</dd>
       <dt>Updated</dt><dd>{{fmtTime .C.UpdatedAt}}</dd>
       <dt>ID</dt><dd class="mono">{{.C.ID}}</dd>
-      {{range .Attrs}}<dt class="mono">{{.Key}}</dt><dd>{{.Value}}</dd>{{end}}
+      {{range .Attrs}}<dt title="{{.Key}}">{{fieldName .Key}}</dt><dd>{{.Value}}</dd>{{end}}
     </dl>
     {{if not .Attrs}}<p class="muted small mt-3">No attributes. <a href="/admin/contacts/{{.C.ID}}/edit">Add some</a>.</p>{{end}}
   </section>
 
   <section class="card" aria-labelledby="c-status-title">
-    <h2 id="c-status-title">Change status</h2>
-    <form method="post" action="/admin/contacts/{{.C.ID}}/status">
+    <h2 id="c-status-title">Status</h2>
+    <p class="muted small">Unsubscribe someone who asked by phone or email, block an address, or reactivate a contact (with a note why).</p>
+    <details{{if .StatusForm.HasErrors}} open{{else}}{{with .StatusForm.Message}} open{{end}}{{end}}><summary class="btn btn-sm">Change status…</summary>
+    <form method="post" action="/admin/contacts/{{.C.ID}}/status" class="mt-3">
       {{template "csrf" $}}
       <input type="hidden" name="version" value="{{.C.Version}}">
       {{template "form-error" .StatusForm}}
@@ -31,6 +35,7 @@ and erase. .Data is ui.audContactData. */}}
       {{template "textarea-field" (dict "Form" .StatusForm "Name" "note" "Label" "Note" "Rows" 2 "Hint" "Why. Needed to resubscribe someone, to reactivate a bounced address or to confirm a pending contact. Complained contacts can't be reactivated. Unsubscribed on a bounced, complained or suppressed contact keeps its status and records the request to unsubscribe.")}}
       <button class="btn" type="submit">Change status</button>
     </form>
+    </details>
   </section>
 </div>
 
@@ -73,7 +78,7 @@ and erase. .Data is ui.audContactData. */}}
     <thead><tr><th scope="col">When</th><th scope="col">What</th><th scope="col">Details</th></tr></thead>
     <tbody>{{range .}}<tr>
       <td class="nowrap" title="{{fmtTime .At}}">{{fmtTime .At}}</td>
-      <td><span class="tag">{{.Type}}</span></td>
+      <td><span class="tl-type tl-{{.Type}}">{{timelineLabel .Type}}</span></td>
       <td>{{.Summary}}</td>
     </tr>{{end}}</tbody>
   </table></div>{{else}}<p class="muted">Nothing has happened yet.</p>{{end}}

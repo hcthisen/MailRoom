@@ -32,6 +32,18 @@ type Export struct {
 	Enrollments     []Enrollment         `json:"enrollments"`
 	PendingOptins   []ExportPendingOptin `json:"pending_optins" doc:"Confirmation requests (double opt-in, resubscribe) with what was submitted, the IP and user agent, open or confirmed"`
 	FormSubmissions []ExportSubmission   `json:"form_submissions"`
+	Received        []ExportReceived     `json:"received" doc:"Email received from the contact or its address (the Inbox); attachments are listed, not included"`
+}
+
+// ExportReceived is one email received from the contact (inbound_messages).
+type ExportReceived struct {
+	ID          int64     `json:"id"`
+	FromEmail   string    `json:"from_email"`
+	FromName    string    `json:"from_name"`
+	Subject     string    `json:"subject"`
+	ReceivedAt  time.Time `json:"received_at"`
+	Text        string    `json:"text"`
+	Attachments []string  `json:"attachments" doc:"File names"`
 }
 
 // ExportPendingOptin is one confirmation request (pending_optins): what a
@@ -141,7 +153,7 @@ func (s *Service) Export(ctx context.Context, id int64) (Export, error) {
 	ex := Export{ExportedAt: s.clock.Now(), Contact: fromCore(c)}
 	steps := []func(context.Context, *sql.Tx, int64, *Export) error{
 		exportTags, exportConsent, exportStatus, exportMessages, exportClicks, exportOpens,
-		exportPendingOptins, exportSubmissions,
+		exportPendingOptins, exportSubmissions, exportReceived,
 	}
 	for _, step := range steps {
 		if err := step(ctx, tx, id, &ex); err != nil {
@@ -316,6 +328,40 @@ func exportSubmissions(ctx context.Context, tx *sql.Tx, id int64, ex *Export) er
 			ex.FormSubmissions = append(ex.FormSubmissions, s)
 			return err
 		})
+}
+
+func exportReceived(ctx context.Context, tx *sql.Tx, id int64, ex *Export) error {
+	ex.Received = []ExportReceived{}
+	err := each(ctx, tx, `SELECT id, from_email, from_name, subject, received_at, text_body FROM inbound_messages
+		WHERE contact_id = ?1 OR from_email = (SELECT email FROM contacts WHERE id = ?1) ORDER BY id`,
+		[]any{id}, func(r *sql.Rows) error {
+			var m ExportReceived
+			var at string
+			if err := r.Scan(&m.ID, &m.FromEmail, &m.FromName, &m.Subject, &at, &m.Text); err != nil {
+				return err
+			}
+			var err error
+			m.ReceivedAt, err = db.ParseTime(at)
+			m.Attachments = []string{}
+			ex.Received = append(ex.Received, m)
+			return err
+		})
+	if err != nil {
+		return err
+	}
+	for i := range ex.Received {
+		err := each(ctx, tx, `SELECT filename FROM inbound_attachments WHERE inbound_id = ? ORDER BY position`,
+			[]any{ex.Received[i].ID}, func(r *sql.Rows) error {
+				var name string
+				err := r.Scan(&name)
+				ex.Received[i].Attachments = append(ex.Received[i].Attachments, name)
+				return err
+			})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func exportClicks(ctx context.Context, tx *sql.Tx, id int64, ex *Export) error {

@@ -73,6 +73,9 @@ type Deps struct {
 	HTTP HTTPDoer
 	// Alerter raises the alert for an UnsubscribeConfirmation. Optional.
 	Alerter core.Alerter
+	// Inbound records SES receipt notifications (received mail). Nil
+	// ignores them.
+	Inbound core.InboundReceiver
 	Clock   core.Clock
 	Logger  *slog.Logger
 	// Limiter rate-limits click and open recording per client IP. Nil
@@ -99,6 +102,7 @@ type Service struct {
 	sns      SNSAPI
 	http     HTTPDoer
 	alerter  core.Alerter
+	inbound  core.InboundReceiver
 	clock    core.Clock
 	log      *slog.Logger
 	limiter  *api.Limiter
@@ -154,6 +158,7 @@ func New(d Deps) *Service {
 		sns:      d.SNS,
 		http:     d.HTTP,
 		alerter:  d.Alerter,
+		inbound:  d.Inbound,
 		clock:    d.Clock,
 		log:      d.Logger,
 		limiter:  d.Limiter,

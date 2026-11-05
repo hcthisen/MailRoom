@@ -53,6 +53,11 @@ type Config struct {
 	SESConfigurationSet string
 	SNSTopicARN         string
 	BackupBucket        string
+	// InboundBucket and InboundDomain (INBOUND_BUCKET, INBOUND_DOMAIN,
+	// written by provision ses) turn receiving on (N-1): SES stores mail to
+	// InboundDomain in the bucket. Both empty = off.
+	InboundBucket string
+	InboundDomain string
 
 	// Secret is the HMAC key material (MAILROOM_SECRET or <data>/secret.key).
 	Secret []byte
@@ -100,6 +105,8 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		SESConfigurationSet: env("SES_CONFIGURATION_SET", DefaultConfigurationSet),
 		SNSTopicARN:         env("SNS_TOPIC_ARN", ""),
 		BackupBucket:        env("BACKUP_BUCKET", ""),
+		InboundBucket:       env("INBOUND_BUCKET", ""),
+		InboundDomain:       strings.ToLower(strings.TrimSuffix(env("INBOUND_DOMAIN", ""), ".")),
 		HTTPAddr:            env("HTTP_ADDR", DefaultHTTPAddr),
 	}
 
@@ -175,6 +182,12 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 	if c.SNSTopicARN != "" && !validSNSTopicARN(c.SNSTopicARN) {
 		fail("SNS_TOPIC_ARN: %q is not an SNS topic ARN", c.SNSTopicARN)
 	}
+	if (c.InboundBucket == "") != (c.InboundDomain == "") {
+		fail("INBOUND_BUCKET and INBOUND_DOMAIN must be set together (provision ses writes both)")
+	}
+	if d := c.InboundDomain; d != "" && c.Domain != "" && d != c.Domain && !strings.HasSuffix(d, "."+c.Domain) {
+		fail("INBOUND_DOMAIN: %q must be DOMAIN or a subdomain of it", d)
+	}
 	if (c.AWSAccessKeyID == "") != (c.AWSSecretAccessKey == "") {
 		fail("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set together")
 	}
@@ -218,6 +231,9 @@ func (c Config) BaseHost() string {
 // AppHost is APP_SUBDOMAIN.DOMAIN, the public host name of the install.
 func (c Config) AppHost() string { return c.AppSubdomain + "." + c.Domain }
 
+// Receiving reports whether receiving email is configured (N-1).
+func (c Config) Receiving() bool { return c.InboundBucket != "" && c.InboundDomain != "" }
+
 // MailFromDomain is MAIL_FROM_SUBDOMAIN.DOMAIN, the SES custom MAIL FROM.
 func (c Config) MailFromDomain() string { return c.MailFromSubdomain + "." + c.Domain }
 
@@ -243,6 +259,7 @@ func (c Config) LogValue() slog.Value {
 		slog.String("ses_configuration_set", c.SESConfigurationSet),
 		slog.String("sns_topic_arn", c.SNSTopicARN),
 		slog.String("backup_bucket", c.BackupBucket),
+		slog.String("inbound_domain", c.InboundDomain),
 		slog.Bool("http_only", c.HTTPOnly),
 		slog.String("http_addr", c.HTTPAddr),
 		slog.Any("trusted_proxies", c.TrustedProxies),

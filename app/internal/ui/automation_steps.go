@@ -91,7 +91,7 @@ func (u *UI) stepNew(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	f := EmptyForm().Set("delay_value", "1").Set("delay_unit", "d").Set("format", content.FormatMarkdown).
+	f := EmptyForm().Set("delay_value", "1").Set("delay_unit", "d").Set("format", content.FormatHTML).
 		Set("version", strconv.FormatInt(seq.Version, 10))
 	if len(seq.Steps) == 0 {
 		f.Set("delay_value", "0")
@@ -228,12 +228,9 @@ func (u *UI) stepTest(w http.ResponseWriter, r *http.Request) error {
 		if code == 0 {
 			return err
 		}
-		d, derr := u.stepEditData(r, seq, st)
-		if derr != nil {
-			return derr
-		}
-		d.TestForm = tf
-		return u.stepView(w, r, code, d)
+		u.Flash(r, FlashError, "The test was not sent: "+formProblem(tf))
+		u.Redirect(w, r, stepURL(seq.ID, st.ID, ""))
+		return nil
 	}
 	u.Flash(r, FlashSuccess, fmt.Sprintf("Test of step %d queued to %s. Tests have no working unsubscribe or tracking links.",
 		st.Position, strings.Join(res.To, ", ")))

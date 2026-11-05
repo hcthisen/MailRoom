@@ -55,6 +55,7 @@ The setup finished on «date». **Don't run the guided setup or phases 1–11 ag
 - write and send newsletters (broadcasts),
 - change sequences, emails and forms,
 - look up contacts and statistics,
+- read and answer received email (the Inbox, `/api/v1/inbound`; show a reply to the user before sending it),
 - import contacts,
 - explain the numbers,
 - troubleshoot with `GET /api/v1/system/doctor`.
@@ -145,6 +146,7 @@ Website form ─► Mailroom (one container, SQLite, HTTPS) ─► Amazon SES �
 - With `DNS_MODE=manual`: look up the nameservers for `DOMAIN`, and tell the customer which provider hosts their DNS.
 - Check that `APP_SUBDOMAIN.DOMAIN` and `MAIL_FROM_SUBDOMAIN.DOMAIN` (defaults `newsletter` and `bounce`) don't already exist in DNS. If one does, ask for another name. Also note whether `_dmarc.DOMAIN` has a TXT record (phase 4).
 - Check whether `OWNER_EMAIL` is on `DOMAIN` (ground rule 4).
+- Note whether `DOMAIN` has MX records, and where they point. Mailroom receives the domain's email by default (its Inbox, phase 3), but only when `DOMAIN` has no MX record yet: an existing mailbox (Google Workspace, Microsoft 365, the web host's mail) is never replaced, and `provision ses` then leaves receiving off. Tell the customer which case applies.
 - Check that `GHL_SHUTDOWN_DATE` is in the future. If fewer than 7 days remain, say so clearly. Phase 1 is then the only thing that is urgent.
 - Report to the customer: what works, what is missing, and the plan.
 
@@ -208,6 +210,7 @@ Follow [deploy/README.md](deploy/README.md) for the exact commands. Run every `d
    ```
 
    It creates (or, when run again, checks and repairs) the SES domain identity with Easy DKIM, the custom MAIL FROM `MAIL_FROM_SUBDOMAIN.DOMAIN`, the configuration set `mailroom`, the SNS topic `mailroom-ses-events`, the backup bucket `mailroom-backup-ACCOUNT-REGION` (left out with `--no-backup-bucket`) and the sending user `mailroom-sender`. It writes `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` of the **sending** user, `AWS_REGION`, `SNS_TOPIC_ARN`, `SES_CONFIGURATION_SET` and `BACKUP_BUCKET` to `/opt/mailroom/.env`, and prints the DNS records (`dns_records` in the JSON; the A/AAAA record comes in phase 4). Save the records, `production_access_enabled` and any `warnings` in `PROGRESS.md`.
+   - **Receiving email** is set up by default: the inbound bucket `mailroom-inbound-ACCOUNT-REGION`, the SES receipt rule set `mailroom` and its rule, and `INBOUND_BUCKET`/`INBOUND_DOMAIN` in `.env` (`inbound_domain` in the JSON); the records then include `MX DOMAIN 10 inbound-smtp.REGION.amazonaws.com`. It is left off, with a warning, when `DOMAIN` already has other MX records (phase 0), another receipt rule set is active, the region has no SES receiving, or the setup key lacks the `CreateMailroomInboundBucket` permissions of guide step 2.6. Only pass `--no-receive` when the customer explicitly doesn't want Mailroom to receive the domain's email. Tell the customer the outcome in one line.
    - If it stops before changing anything because it can't write `.env`, fix the owner as in deploy/README.md §2 and run it again.
    - It is safe to run again. If it says the sending user already has a key that is not in `.env`, run it again with `--rotate-keys`.
 5. If `production_access_enabled` is false (the SES sandbox), draft the production access text in `secrets/ses-use-case.txt` (200 to 5,000 characters):
@@ -221,7 +224,7 @@ Follow [deploy/README.md](deploy/README.md) for the exact commands. Run every `d
 
 ## Phase 4: DNS
 
-The records are: an A (and AAAA) record for `APP_SUBDOMAIN.DOMAIN` pointing to the server, the 3 DKIM CNAMEs, and the MAIL FROM MX + TXT (SPF). If `_dmarc.DOMAIN` doesn't exist, also propose a monitoring-only DMARC record, and create it only after a yes. With `OWNER_EMAIL` on `DOMAIN` it is `v=DMARC1; p=none; rua=mailto:OWNER_EMAIL`. If `OWNER_EMAIL` is on another domain (e.g. Gmail), Mailroom proposes `v=DMARC1; p=none` without `rua`: reports to another domain need an authorization record there, so receivers would send none. Ask the customer whether they want the reports at an address on `DOMAIN`; if so, add that `rua` to the record by hand.
+The records are: an A (and AAAA) record for `APP_SUBDOMAIN.DOMAIN` pointing to the server, the 3 DKIM CNAMEs, the MAIL FROM MX + TXT (SPF), and, with receiving on, the MX record of `DOMAIN` itself pointing to SES receiving. Say plainly at CHECKPOINT 3 that this MX record sends all email for the domain to Mailroom's Inbox. If `_dmarc.DOMAIN` doesn't exist, also propose a monitoring-only DMARC record, and create it only after a yes. With `OWNER_EMAIL` on `DOMAIN` it is `v=DMARC1; p=none; rua=mailto:OWNER_EMAIL`. If `OWNER_EMAIL` is on another domain (e.g. Gmail), Mailroom proposes `v=DMARC1; p=none` without `rua`: reports to another domain need an authorization record there, so receivers would send none. Ask the customer whether they want the reports at an address on `DOMAIN`; if so, add that `rua` to the record by hand.
 
 Both commands read the DKIM tokens from SES with the sending keys in `/opt/mailroom/.env`, so they need no setup keys (only Cloudflare needs its token). Always pass the server's addresses: `--ipv4 IPV4` (and `--ipv6 IPV6` if it has one). Without them the A/AAAA record is left out, and HTTPS fails in phase 5. Add `--dmarc` only for the DMARC record the customer said yes to. Run the commands as in deploy/README.md §5 (`sudo docker compose run --rm mailroom …`).
 
@@ -299,6 +302,7 @@ Nothing in this phase may email a real contact (ground rule 4): real contacts ar
 - Test unsubscribing, both from the link and with a one-click POST to the `List-Unsubscribe` URL (body `List-Unsubscribe=One-Click`). Check the contact's status with `GET /api/v1/contacts/{id}`.
 - Test bounce and complaint through the simulator addresses in the segment, and check that the contacts become `bounced` and `complained`.
 - Click a link in the test mail and check that the click shows up on the contact (`GET /api/v1/contacts/{id}/timeline`). `GET /api/v1/broadcasts/{id}/stats` shows the totals.
+- With receiving on: send an email from an outside address (the customer's Gmail, or a reply to the test broadcast) to an address on `DOMAIN`, and check that it appears in `GET /api/v1/inbound` (and under **Inbox** in the UI) within a minute, with the sender linked to its contact when it is one. Reply to it once with `POST /api/v1/inbound/{id}/reply` (sandbox: only to addresses on `DOMAIN` or the simulator), and check the doctor's `inbound` check is `ok`. Mail to test addresses on `DOMAIN` now lands in this Inbox too, with SES's SPF, DKIM and DMARC verdicts on each message.
 - Check with `GET /api/v1/system/ses` that `account.production_access_enabled` is true, and read the quota (`account.max_24_hour_send`, `account.max_send_rate`).
 
 ⛔ **CHECKPOINT 5:** Show the results, and the mid-flow enrolment plan from phase 8 step 4 (per sequence: how many contacts, at which step, from when). Only after this may anything be sent to real recipients.
@@ -319,6 +323,7 @@ Nothing in this phase may email a real contact (ground rule 4): real contacts ar
    - how to send a newsletter,
    - how to change an email or a delay in a sequence,
    - how to add a form,
+   - where received email shows up (the Inbox, when receiving is on) and how to answer it,
    - how to ask a coding agent to do things through the API (point to `/api/v1/docs`),
    - backup and restore, including the key file `data/secret.key`, `data/media/` and a safe copy of the server's `/opt/mailroom/.env` (deploy/README.md, "Backups and disaster recovery"), and that a restore starts with all sending paused: check the carried-over opt-outs, then resume (deploy/README.md, "What a restore does"),
    - what to do if Mailroom or AWS sends a warning,

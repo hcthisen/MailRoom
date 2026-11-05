@@ -32,6 +32,7 @@ import (
 	"mailroom/internal/forms"
 	"mailroom/internal/hooks"
 	"mailroom/internal/imports"
+	"mailroom/internal/inbound"
 	"mailroom/internal/jobs"
 	"mailroom/internal/segments"
 	"mailroom/internal/sending"
@@ -125,6 +126,7 @@ type App struct {
 	Forms      *forms.Service
 	Imports    *imports.Service
 	Stats      *stats.Service
+	Inbound    *inbound.Service
 
 	// UI is the admin UI, mounted under /admin/.
 	UI *ui.UI
@@ -221,9 +223,12 @@ func (a *App) build(ctx context.Context, opts Options) error {
 		Resolver: opts.Resolver, CertChecker: opts.CertChecker, HTTP: opts.DoctorHTTP,
 		Version: opts.Version, StartedAt: opts.StartedAt, Logger: log,
 	})
+	a.Inbound = inbound.New(inbound.Deps{
+		DB: d, Store: a.Store, Settings: a.Settings, Config: cfg, S3: aws.Inbound, Clock: clock, Logger: log,
+	})
 	a.Events = events.New(events.Deps{
 		DB: d, Store: a.Store, Settings: a.Settings, Signer: a.Signer, Config: cfg,
-		SNS: aws.SNS, HTTP: opts.WebhookHTTP, Alerter: a.Sending, Clock: clock, Logger: log,
+		SNS: aws.SNS, HTTP: opts.WebhookHTTP, Alerter: a.Sending, Inbound: a.Inbound, Clock: clock, Logger: log,
 	})
 	a.Sequences = sequences.New(sequences.Deps{
 		DB: d, Store: a.Store, Content: a.Content, Bus: a.Bus, Jobs: a.Jobs, Settings: a.Settings,
@@ -254,7 +259,7 @@ func (a *App) build(ctx context.Context, opts Options) error {
 	// the mux on a duplicate route, so each is registered exactly once.
 	for _, r := range []interface{ RegisterAPI(*api.API) }{
 		a.Settings, a.Auth, a.Audit, a.Jobs, a.Contacts, a.Segments, a.Content, a.Sending,
-		a.System, a.Sequences, a.Broadcasts, a.Forms, a.Imports, a.Stats,
+		a.System, a.Sequences, a.Broadcasts, a.Forms, a.Imports, a.Stats, a.Inbound,
 	} {
 		r.RegisterAPI(a.API)
 	}
@@ -273,6 +278,7 @@ func (a *App) build(ctx context.Context, opts Options) error {
 		Auth: a.Auth, Settings: a.Settings, Audit: a.Audit, Jobs: a.Jobs, Contacts: a.Contacts,
 		Segments: a.Segments, Content: a.Content, Sending: a.Sending, System: a.System,
 		Sequences: a.Sequences, Broadcasts: a.Broadcasts, Forms: a.Forms, Imports: a.Imports, Stats: a.Stats,
+		Inbound: a.Inbound,
 	})
 	a.Server.PublicMux.Handle(ui.Prefix+"/", a.UI.Handler())
 	a.Server.PublicMux.Handle("GET /{$}", ui.RootRedirect())
@@ -292,6 +298,9 @@ func (a *App) build(ctx context.Context, opts Options) error {
 		a.Events.SubscriberWorker(),
 		a.UI.DoctorWorker(),
 	)
+	if cfg.Receiving() && aws.Inbound != nil {
+		a.workers = append(a.workers, a.Inbound.FetcherWorker())
+	}
 	return nil
 }
 

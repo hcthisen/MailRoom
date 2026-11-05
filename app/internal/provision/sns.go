@@ -33,7 +33,11 @@ func (r *run) topic(ctx context.Context) error {
 		r.step("sns topic", ActionUnchanged, arn)
 	}
 
-	want := TopicPolicy(arn, r.res.AccountID, r.res.ConfigurationSetARN)
+	sources := []string{r.res.ConfigurationSetARN}
+	if r.receive {
+		sources = append(sources, r.arns.receiptRule())
+	}
+	want := TopicPolicy(arn, r.res.AccountID, sources...)
 	if !created && policyMatches(curPolicy, want) {
 		r.step("sns topic policy", ActionUnchanged, "ses.amazonaws.com may publish for "+r.in.ConfigurationSet)
 		return nil

@@ -47,6 +47,18 @@ func (s *Service) Render(ctx context.Context, in core.RenderInput) (core.Rendere
 	if in.SystemTemplate != "" {
 		return s.renderSystem(ctx, in)
 	}
+	if in.EmailID <= 0 && isTestData(in.Data) {
+		// A test of unsaved editor content (SendTestDraft) carries it in Data.
+		if d, ok := draftFromData(in.Data); ok {
+			if in.Contact == nil {
+				var err error
+				if in.Contact, err = s.contactFromData(ctx, in.Data); err != nil {
+					return core.Rendered{}, err
+				}
+			}
+			return s.renderDraft(ctx, d, in, nil, false)
+		}
+	}
 	if in.EmailID <= 0 {
 		return core.Rendered{}, invalid("email_id", "is required unless a system template is used")
 	}
@@ -175,6 +187,10 @@ func (s *Service) renderBody(d Draft, vals values, brandColor string) (body, hea
 	src, ph := t.placeholders(d.Body)
 	if d.Format == FormatHTML {
 		headStyles, body = splitDocument(src)
+		if IsVisualBody(d.Body) {
+			// Made in the visual editor: style it like Markdown output.
+			body = inlineStyles(body, brandColor)
+		}
 	} else {
 		out, err := s.markdownToHTML(src)
 		if err != nil {

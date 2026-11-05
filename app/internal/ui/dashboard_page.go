@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"mailroom/internal/broadcasts"
 	"mailroom/internal/core"
 	"mailroom/internal/sending"
 	"mailroom/internal/stats"
@@ -15,7 +16,7 @@ import (
 func init() {
 	registerGroup("dashboard", func(u *UI) {
 		u.handle(Action{Method: http.MethodGet, Path: Prefix + "/{$}", OperationID: "get-dashboard-stats",
-			Uses: []string{"get-ses-status", "get-sending-state", "run-doctor"}, Handler: u.dashboard})
+			Uses: []string{"get-ses-status", "get-sending-state", "run-doctor", "list-broadcasts"}, Handler: u.dashboard})
 	})
 }
 
@@ -50,6 +51,9 @@ type dashboardData struct {
 	BounceLevel    string // "", "warn" or "danger"
 	ComplaintLevel string
 	QuotaPercent   int // 0-100, for the meter
+
+	Recent    []broadcasts.Broadcast // the newest broadcasts
+	RecentErr string
 }
 
 func level(v, warn, danger float64) string {
@@ -81,7 +85,7 @@ func (u *UI) dashboard(w http.ResponseWriter, r *http.Request) error {
 	cancel()
 	switch {
 	case errors.Is(err, core.ErrConflict):
-		d.SESErr = "SES is not configured yet: the sending user's AWS keys are missing. Run `mailroom provision ses` (see the deploy guide)."
+		d.SESErr = "Email sending isn't connected yet: Amazon SES still has to be set up. Ask whoever installed Mailroom to finish it."
 	case err != nil:
 		u.log.WarnContext(ctx, "ui: SES status", "err", err)
 		d.SESErr = "The SES account status could not be read right now."
@@ -104,6 +108,12 @@ func (u *UI) dashboard(w http.ResponseWriter, r *http.Request) error {
 				d.Warnings = append(d.Warnings, c)
 			}
 		}
+	}
+	if bs, err := u.d.Broadcasts.List(ctx, broadcasts.ListFilter{Limit: 5}); err != nil {
+		u.log.ErrorContext(ctx, "ui: recent broadcasts", "err", err)
+		d.RecentErr = "The broadcasts could not be read."
+	} else {
+		d.Recent = bs
 	}
 	return u.Page(w, r, "dashboard/index", View{Title: "Dashboard", Nav: "dashboard", Data: d})
 }

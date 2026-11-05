@@ -188,17 +188,21 @@ func Test_broadcasts_testSendAndPreview(t *testing.T) {
 	id := createBroadcast(t, c, "Tested")
 	path := fmt.Sprintf("/admin/broadcasts/%d", id)
 
-	c.post(path+"/test", url.Values{"to": {"me@example.org, not-an-address"}}).want(t, http.StatusUnprocessableEntity).
-		contains(t, `id="f-to-error"`, "address 2 is not a valid email address", "me@example.org, not-an-address")
-	c.post(path+"/test", url.Values{"to": {"a@x.org b@x.org c@x.org d@x.org e@x.org f@x.org"}}).want(t, http.StatusUnprocessableEntity).
-		contains(t, `id="f-to-error"`, "at most 5")
-	c.post(path+"/test", url.Values{"to": {""}}).want(t, http.StatusUnprocessableEntity).contains(t, "enter at least one address")
-	c.post(path+"/test", url.Values{"to": {"me@example.org"}, "contact": {"99999"}}).want(t, http.StatusUnprocessableEntity).
-		contains(t, `id="f-contact-error"`, "does not exist")
-	c.post(path+"/test", url.Values{"to": {"me@example.org"}, "contact": {"12abc"}}).want(t, http.StatusUnprocessableEntity).
-		contains(t, `id="f-contact-error"`, "must be a contact&#39;s email address")
-	c.post(path+"/test", url.Values{"to": {"me@example.org"}, "contact": {"nobody@example.org"}}).want(t, http.StatusUnprocessableEntity).
-		contains(t, `id="f-contact-error"`, "no contact has the address nobody@example.org")
+	// Problems come back as a flash on the page.
+	for _, tc := range []struct {
+		form url.Values
+		want string
+	}{
+		{url.Values{"to": {"me@example.org, not-an-address"}}, "address 2 is not a valid email address"},
+		{url.Values{"to": {"a@x.org b@x.org c@x.org d@x.org e@x.org f@x.org"}}, "at most 5"},
+		{url.Values{"to": {""}}, "enter at least one address"},
+		{url.Values{"to": {"me@example.org"}, "contact": {"99999"}}, "does not exist"},
+		{url.Values{"to": {"me@example.org"}, "contact": {"12abc"}}, "must be a contact&#39;s email address"},
+		{url.Values{"to": {"me@example.org"}, "contact": {"nobody@example.org"}}, "no contact has the address nobody@example.org"},
+	} {
+		c.post(path+"/test", tc.form).wantRedirect(t, path)
+		c.get(path).want(t, http.StatusOK).contains(t, "The test was not sent", tc.want)
+	}
 	if n := hs.count(`SELECT count(*) FROM messages WHERE kind = 'test'`); n != 0 {
 		t.Fatalf("%d test messages after invalid posts", n)
 	}
@@ -213,7 +217,7 @@ func Test_broadcasts_testSendAndPreview(t *testing.T) {
 
 	// Preview of the saved email, with and without a contact's data.
 	p := c.htmx(http.MethodPost, path+"/preview", url.Values{}).want(t, http.StatusOK)
-	p.contains(t, `<iframe class="preview-frame"`, `sandbox=""`, "Autumn news for you").lacks(t, "<html")
+	p.contains(t, `<iframe class="preview-frame"`, `sandbox="allow-same-origin"`, "Autumn news for you").lacks(t, "<html")
 	c.htmx(http.MethodPost, path+"/preview", url.Values{"preview_contact": {"ann@example.org"}}).want(t, http.StatusOK).
 		contains(t, "ann@example.org")
 	c.htmx(http.MethodPost, path+"/preview", url.Values{"preview_contact": {strconv.FormatInt(ann.ID, 10)}}).want(t, http.StatusOK).
@@ -233,15 +237,23 @@ func Test_broadcasts_scheduleSendPauseResume(t *testing.T) {
 	id := createBroadcast(t, c, "Big send")
 	path := fmt.Sprintf("/admin/broadcasts/%d", id)
 
-	// The schedule form is prefilled with the next full hour (Europe/London).
+	// The schedule form is prefilled with tomorrow 09:00 (Europe/London);
+	// the page has the checklist and the editor's preview and test box.
 	show := c.get(path).want(t, http.StatusOK)
-	show.contains(t, `name="at" type="datetime-local" value="2026-01-05T10:00"`, "Europe/London")
+	show.contains(t, `name="at" type="datetime-local" value="2026-01-06T09:00"`, "Europe/London", "Before you send",
+		"2 active contacts", "Not sent yet", `hx-post="/admin/editor/test"`).lacks(t, "Cancel broadcast…")
 
 	// Schedule: a past time is an inline error, a future one schedules.
 	c.post(path+"/schedule", url.Values{"at": {"2026-01-01T10:00"}}).want(t, http.StatusUnprocessableEntity).
 		contains(t, `id="f-at-error"`, "must be in the future")
 	c.post(path+"/schedule", url.Values{"at": {"garbage"}}).want(t, http.StatusUnprocessableEntity).contains(t, `id="f-at-error"`)
-	c.post(path+"/schedule", url.Values{"at": {"2026-07-01T09:30"}}).wantRedirect(t, path)
+	// Scheduling asks first, with the recipient count, and changes nothing.
+	c.post(path+"/schedule", url.Values{"at": {"2026-07-01T09:30"}}).want(t, http.StatusOK).
+		contains(t, "Schedule for 2 recipients", `name="confirm" value="yes"`)
+	if bcStatus(t, hs, id).Status != "draft" {
+		t.Fatal("the schedule confirmation scheduled it")
+	}
+	c.post(path+"/schedule", url.Values{"at": {"2026-07-01T09:30"}, "confirm": {"yes"}}).wantRedirect(t, path)
 	b := bcStatus(t, hs, id)
 	if b.Status != "scheduled" || b.ScheduledAt == nil || !b.ScheduledAt.Equal(time.Date(2026, 7, 1, 8, 30, 0, 0, time.UTC)) {
 		t.Fatalf("scheduled %+v (BST is UTC+1)", b)
@@ -261,7 +273,7 @@ func Test_broadcasts_scheduleSendPauseResume(t *testing.T) {
 	// and changes nothing.
 	ver := c.get(path).want(t, http.StatusOK).field(t, "version")
 	conf := c.post(path+"/send", url.Values{"version": {ver}}).want(t, http.StatusOK)
-	conf.contains(t, "Please confirm", "2 recipients: every active contact whose address isn&#39;t suppressed", "Send now to 2 recipients",
+	conf.contains(t, "Please confirm", "2 recipients: every active contact whose address isn&#39;t suppressed", "Send anyway to 2 recipients", "No test of this email has been delivered yet",
 		`name="confirm" value="yes"`, `name="version" value="`+ver+`"`, "btn-danger")
 	if bcStatus(t, hs, id).Status != "draft" {
 		t.Fatal("dry run changed the status")

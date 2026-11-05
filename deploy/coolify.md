@@ -45,7 +45,9 @@ BASE_URL=https://newsletter.example.com \
   go run ./app/cmd/mailroom provision ses --env-file secrets/mailroom-server.env --json > secrets/provision-ses.json
 ```
 
-(`DOMAIN`, `APP_SUBDOMAIN`, `MAIL_FROM_SUBDOMAIN`, `OWNER_EMAIL`, `AWS_REGION` and the setup keys come from the loaded `.env`.) `secrets/mailroom-server.env` now holds `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `SNS_TOPIC_ARN`, `SES_CONFIGURATION_SET` and `BACKUP_BUCKET` of the sending user. These go into Coolify in step 4. The production-access request (`--request-production --use-case FILE`) also runs here, the same way.
+(`DOMAIN`, `APP_SUBDOMAIN`, `MAIL_FROM_SUBDOMAIN`, `OWNER_EMAIL`, `AWS_REGION` and the setup keys come from the loaded `.env`.) `secrets/mailroom-server.env` now holds `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `SNS_TOPIC_ARN`, `SES_CONFIGURATION_SET`, `BACKUP_BUCKET`, `INBOUND_BUCKET` and `INBOUND_DOMAIN` of the sending user.
+
+Receiving email is set up by default (Mailroom's Inbox gets all mail sent to addresses on `DOMAIN`). It is left off, with a warning in the JSON's `warnings`, when `DOMAIN` already has MX records pointing elsewhere (an existing mailbox, which is never replaced), another SES receipt rule set is active, or the region has no SES receiving; `--no-receive` turns it off. When it is off, `INBOUND_BUCKET` and `INBOUND_DOMAIN` are empty: leave them out of Coolify. These go into Coolify in step 4. The production-access request (`--request-production --use-case FILE`) also runs here, the same way.
 
 ## 4. Create the application in Coolify
 
@@ -71,7 +73,7 @@ With `COOLIFY_URL` and an API token (`COOLIFY_API_TOKEN`, created under **Keys &
 2. Create the application: `POST /applications/private-github-app` (with `github_app_uuid`), `/applications/private-deploy-key` or `/applications/public`, with `git_repository`, `git_branch: main`, `build_pack: dockercompose`, `docker_compose_location: /docker-compose.yaml` and `instant_deploy: false`.
 3. Set the domain: `PATCH /applications/{uuid}` with `docker_compose_domains: [{"name": "mailroom", "domain": "https://newsletter.example.com:8080"}]`.
 4. Set the variables of step 4.4: `PATCH /applications/{uuid}/envs/bulk` (or one `POST /applications/{uuid}/envs` per variable). Mark the secrets as such if the version supports it.
-5. Deploy (after DNS): `GET /deploy?uuid={uuid}`, then follow `GET /deployments/{deployment_uuid}` until it is finished, and `GET /applications/{uuid}/logs` on failure.
+5. Deploy (after DNS): `POST /deploy?uuid={uuid}` with an empty JSON body (Coolify 4.5; older versions used `GET`), then follow `GET /deployments/{deployment_uuid}` until it is finished, and `GET /applications/{uuid}/logs` on failure.
 
 ## 5. DNS
 
@@ -85,7 +87,7 @@ go run ./app/cmd/mailroom dns records --ipv4 COOLIFY_IPV4 --ipv6 COOLIFY_IPV6
 go run ./app/cmd/mailroom provision dns --cloudflare --ipv4 COOLIFY_IPV4 --ipv6 COOLIFY_IPV6
 ```
 
-If the Coolify server already has a wildcard record for `*.DOMAIN`, the A/AAAA record is already there; add the DKIM and MAIL FROM records only.
+If the Coolify server already has a wildcard record for `*.DOMAIN`, the A/AAAA record is already there; add the DKIM and MAIL FROM records only. With receiving on, the list also has `MX DOMAIN 10 inbound-smtp.REGION.amazonaws.com`; once it exists, send a test email to any address on the domain and check that it shows up under **Inbox** in the admin within a minute.
 
 ## 6. Deploy and check
 

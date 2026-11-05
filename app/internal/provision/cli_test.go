@@ -117,7 +117,7 @@ func TestProvisionSESCommandHuman(t *testing.T) {
 
 func TestProvisionSESCommandJSON(t *testing.T) {
 	e := newCLIEnv(t)
-	r := e.provision("ses", "--env-file", e.file, "--no-backup-bucket", "--json")
+	r := e.provision("ses", "--env-file", e.file, "--no-backup-bucket", "--no-receive", "--json")
 	if r.code != ExitOK || r.stderr != "" {
 		t.Fatalf("exit %d stderr %s", r.code, r.stderr)
 	}

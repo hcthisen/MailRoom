@@ -9,5 +9,5 @@ import "embed"
 
 // FS holds the static files, at the root of the file system.
 //
-//go:embed htmx.min.js app.css app.js VENDOR.md
+//go:embed htmx.min.js app.css app.js editor.js VENDOR.md
 var FS embed.FS

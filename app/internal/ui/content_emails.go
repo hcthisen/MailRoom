@@ -139,7 +139,7 @@ func (u *UI) renderEmail(w http.ResponseWriter, r *http.Request, status int, e *
 	v := View{Title: "New email", Nav: "content", Crumbs: []Crumb{{"Emails", emailsPath}}}
 	if e == nil {
 		if d.Form == nil {
-			d.Form = EmptyForm().Set("format", content.FormatMarkdown)
+			d.Form = EmptyForm().Set("format", content.FormatHTML)
 		}
 		v.Subtitle = "A stand-alone email. Use it later as a sequence step, or keep it as a template to copy from."
 		v.Data = d
@@ -258,8 +258,7 @@ func (u *UI) emailTest(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	ctx := r.Context()
-	e, err := u.d.Content.GetEmail(ctx, nil, id)
-	if err != nil {
+	if _, err := u.d.Content.GetEmail(ctx, nil, id); err != nil {
 		return err
 	}
 	tf := NewForm(r)
@@ -273,7 +272,9 @@ func (u *UI) emailTest(w http.ResponseWriter, r *http.Request) error {
 		if tf.Fail(err) == 0 {
 			return err
 		}
-		return u.renderEmail(w, r, http.StatusUnprocessableEntity, &e, nil, tf)
+		u.Flash(r, FlashError, "The test was not sent: "+formProblem(tf))
+		u.Redirect(w, r, emailURL(id, ""))
+		return nil
 	}
 	var sent []string
 	err = u.tx(ctx, func(tx *sql.Tx) error {
@@ -282,11 +283,12 @@ func (u *UI) emailTest(w http.ResponseWriter, r *http.Request) error {
 		return err
 	})
 	if err != nil {
-		st := tf.Fail(autoRetarget(err, autoFoldIndex("to", to)))
-		if st == 0 {
+		if tf.Fail(autoRetarget(err, autoFoldIndex("to", to))) == 0 {
 			return err
 		}
-		return u.renderEmail(w, r, st, &e, nil, tf)
+		u.Flash(r, FlashError, "The test was not sent: "+formProblem(tf))
+		u.Redirect(w, r, emailURL(id, ""))
+		return nil
 	}
 	u.Flash(r, FlashSuccess, fmt.Sprintf("Test queued to %s. Tests are skipped for opted-out or suppressed addresses, have no working unsubscribe or tracking links and don't count in the stats.",
 		strings.Join(sent, ", ")))

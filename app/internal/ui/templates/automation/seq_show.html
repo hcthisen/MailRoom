@@ -1,14 +1,15 @@
 {{/* A sequence: settings summary, numbers and steps with per-step stats (get-sequence, get-sequence-stats). .Data is ui.seqShowData. */}}
 {{define "actions"}}{{with .Data.Seq}}{{$v := printf "%d" .Version}}
-{{if eq .Status "paused"}}{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/sequences/%d/resume" .ID) "Label" "Resume" "Class" "btn-primary" "Fields" (dict "version" $v))}}
-{{else}}{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/sequences/%d/pause" .ID) "Label" "Pause" "Class" "" "Fields" (dict "version" $v))}}{{end}}
-{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/sequences/%d/delete" .ID) "Label" "Delete…" "Class" "btn-danger")}}
+<span class="onoff {{if eq .Status "paused"}}is-off{{else}}is-on{{end}}">{{if eq .Status "paused"}}Off{{else}}On{{end}}</span>
+{{if eq .Status "paused"}}{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/sequences/%d/resume" .ID) "Label" "Turn on…" "Class" "btn-primary" "Fields" (dict "version" $v))}}
+{{else}}{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/sequences/%d/pause" .ID) "Label" "Turn off" "Class" " " "Fields" (dict "version" $v))}}{{end}}
+<details class="menu"><summary class="btn btn-icon" aria-label="More actions" title="More actions">⋯</summary><div class="menu-items">{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/sequences/%d/delete" .ID) "Label" "Delete sequence…" "Class" "menu-item is-danger")}}</div></details>
 {{end}}{{end}}
 
 {{define "content"}}{{with .Data}}{{$seq := .Seq}}
 {{.Tabs}}
 
-{{if eq .Seq.Status "paused"}}<div class="flash flash-warning" role="status"><p><strong>This sequence is paused.</strong> Enrollments keep their place and new ones are accepted, but no step is sent until you resume it.</p></div>{{end}}
+{{if eq .Seq.Status "paused"}}<div class="flash flash-warning" role="status"><p><strong>This sequence is off: nothing is sent.</strong> Contacts can be enrolled and keep their place, but no email goes out until you switch it on with <em>Turn on</em> at the top.</p></div>{{end}}
 
 <div class="grid grid-2">
   <section class="card" aria-labelledby="summary-title">
@@ -31,42 +32,39 @@
 <section class="card" aria-labelledby="steps-title" id="steps">
   <div class="card-header"><h2 id="steps-title">Steps</h2><div class="actions"><a class="btn btn-sm btn-primary" href="/admin/sequences/{{.Seq.ID}}/steps/new">Add step</a></div></div>
   {{if .Steps}}
-  <div class="table-wrap">
-    <table class="table">
-      <thead>
-        <tr>
-          <th scope="col" class="num">#</th>
-          <th scope="col">Email and timing</th>
-          <th scope="col" class="num" title="Active enrollments whose next step is this one">Waiting</th>
-          <th scope="col" class="num">Sent</th>
-          <th scope="col" class="num">Delivered</th>
-          <th scope="col" class="num">Bounced</th>
-          <th scope="col" class="num" title="Unique contacts who clicked a link">Clicked</th>
-          <th scope="col" class="num">Unsub.</th>
-          <th scope="col" class="actions" aria-label="Actions"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {{range .Steps}}
-        <tr>
-          <td class="num">{{.Step.Position}}</td>
-          <td><a href="/admin/sequences/{{$seq.ID}}/steps/{{.Step.ID}}">{{.Step.Subject}}</a>{{if eq .Step.Format "html"}} <span class="muted small">HTML</span>{{end}}<br><span class="muted small">{{.When}}</span></td>
-          <td class="num">{{num .Stats.Waiting}}</td>
-          <td class="num">{{num .Stats.Sent}}{{if .Stats.Queued}}<br><span class="muted small">{{num .Stats.Queued}} queued</span>{{end}}</td>
-          <td class="num">{{num .Stats.Delivered}}</td>
-          <td class="num">{{num .Stats.Bounced}}{{if .Stats.Complained}}<br><span class="muted small">{{num .Stats.Complained}} spam</span>{{end}}</td>
-          <td class="num">{{num .Stats.Clicked}}</td>
-          <td class="num">{{num .Stats.Unsubscribed}}</td>
-          <td class="actions">
+  <ol class="flow">
+    <li class="flow-trigger">
+      <span class="flow-icon" aria-hidden="true">⚡</span>
+      <div><strong>Starts when</strong>
+        <p>{{with $seq.TriggerTag}}the tag <span class="tag">{{.}}</span> is added to an active contact{{else}}a contact is enrolled by a form, an import or by hand{{end}}{{with $seq.ExitTags}} · stops early for {{range $i, $t := .}}{{if $i}}, {{end}}<span class="tag">{{$t}}</span>{{end}}{{end}}</p></div>
+      <a class="btn btn-sm btn-ghost" href="/admin/sequences/{{$seq.ID}}/edit">Edit</a>
+    </li>
+    {{range .Steps}}
+    <li class="flow-wait"><span class="flow-pill">{{template "icon" "sequences"}} {{.When}}</span></li>
+    <li class="flow-email">
+      <span class="flow-icon" aria-hidden="true">{{.Step.Position}}</span>
+      <div class="flow-body">
+        <a class="flow-title" href="/admin/sequences/{{$seq.ID}}/steps/{{.Step.ID}}">{{mergeChips .Step.Subject}}</a>
+        <p class="flow-stats">
+          <span title="Active enrollments whose next step is this one"><strong>{{num .Stats.Waiting}}</strong> waiting</span>
+          <span><strong>{{num .Stats.Sent}}</strong> sent{{if .Stats.Queued}} ({{num .Stats.Queued}} queued){{end}}</span>
+          <span><strong>{{num .Stats.Delivered}}</strong> delivered</span>
+          <span title="Unique contacts who clicked a link"><strong>{{num .Stats.Clicked}}</strong> clicked</span>
+          {{if .Stats.Bounced}}<span class="is-bad"><strong>{{num .Stats.Bounced}}</strong> bounced</span>{{end}}
+          {{if .Stats.Complained}}<span class="is-bad"><strong>{{num .Stats.Complained}}</strong> spam</span>{{end}}
+          {{if .Stats.Unsubscribed}}<span><strong>{{num .Stats.Unsubscribed}}</strong> unsubscribed</span>{{end}}
+        </p>
+      </div>
+      <div class="flow-actions">
             {{if not .First}}<form method="post" action="/admin/sequences/{{$seq.ID}}/steps/{{.Step.ID}}/move" class="inline">{{template "csrf" $}}<input type="hidden" name="version" value="{{$seq.Version}}"><input type="hidden" name="dir" value="up"><button class="btn btn-sm btn-ghost" type="submit" aria-label="Move step {{.Step.Position}} up" title="Move up">↑</button></form>{{end}}
             {{if not .Last}}<form method="post" action="/admin/sequences/{{$seq.ID}}/steps/{{.Step.ID}}/move" class="inline">{{template "csrf" $}}<input type="hidden" name="version" value="{{$seq.Version}}"><input type="hidden" name="dir" value="down"><button class="btn btn-sm btn-ghost" type="submit" aria-label="Move step {{.Step.Position}} down" title="Move down">↓</button></form>{{end}}
-            <a class="btn btn-sm" href="/admin/sequences/{{$seq.ID}}/steps/{{.Step.ID}}" aria-label="Edit step {{.Step.Position}}">Edit</a>
-          </td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
-  </div>
+        <a class="btn btn-sm" href="/admin/sequences/{{$seq.ID}}/steps/{{.Step.ID}}" aria-label="Edit step {{.Step.Position}}">Edit</a>
+      </div>
+    </li>
+    {{end}}
+    <li class="flow-add"><a class="btn btn-sm" href="/admin/sequences/{{$seq.ID}}/steps/new">{{template "icon" "plus"}} Add an email</a></li>
+    <li class="flow-end"><span class="flow-pill">Done: the contact has had every email</span></li>
+  </ol>
   <p class="muted small">Delays count from when the previous step was queued. Test sends are not counted.</p>
   {{else}}
   {{template "empty" (dict "Title" "No steps yet" "Text" "Nobody can be enrolled until the sequence has at least one step." "ActionURL" (printf "/admin/sequences/%d/steps/new" .Seq.ID) "ActionLabel" "Add the first step")}}

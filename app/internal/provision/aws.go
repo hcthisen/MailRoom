@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -11,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/ses"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -71,6 +73,19 @@ type S3API interface {
 	PutBucketLifecycleConfiguration(ctx context.Context, in *s3.PutBucketLifecycleConfigurationInput, opts ...func(*s3.Options)) (*s3.PutBucketLifecycleConfigurationOutput, error)
 	GetBucketVersioning(ctx context.Context, in *s3.GetBucketVersioningInput, opts ...func(*s3.Options)) (*s3.GetBucketVersioningOutput, error)
 	PutBucketVersioning(ctx context.Context, in *s3.PutBucketVersioningInput, opts ...func(*s3.Options)) (*s3.PutBucketVersioningOutput, error)
+	GetBucketPolicy(ctx context.Context, in *s3.GetBucketPolicyInput, opts ...func(*s3.Options)) (*s3.GetBucketPolicyOutput, error)
+	PutBucketPolicy(ctx context.Context, in *s3.PutBucketPolicyInput, opts ...func(*s3.Options)) (*s3.PutBucketPolicyOutput, error)
+}
+
+// SESReceiptAPI is the part of the SES v1 client receiving uses: receipt
+// rules exist only in the v1 API.
+type SESReceiptAPI interface {
+	DescribeActiveReceiptRuleSet(ctx context.Context, in *ses.DescribeActiveReceiptRuleSetInput, opts ...func(*ses.Options)) (*ses.DescribeActiveReceiptRuleSetOutput, error)
+	CreateReceiptRuleSet(ctx context.Context, in *ses.CreateReceiptRuleSetInput, opts ...func(*ses.Options)) (*ses.CreateReceiptRuleSetOutput, error)
+	DescribeReceiptRule(ctx context.Context, in *ses.DescribeReceiptRuleInput, opts ...func(*ses.Options)) (*ses.DescribeReceiptRuleOutput, error)
+	CreateReceiptRule(ctx context.Context, in *ses.CreateReceiptRuleInput, opts ...func(*ses.Options)) (*ses.CreateReceiptRuleOutput, error)
+	UpdateReceiptRule(ctx context.Context, in *ses.UpdateReceiptRuleInput, opts ...func(*ses.Options)) (*ses.UpdateReceiptRuleOutput, error)
+	SetActiveReceiptRuleSet(ctx context.Context, in *ses.SetActiveReceiptRuleSetInput, opts ...func(*ses.Options)) (*ses.SetActiveReceiptRuleSetOutput, error)
 }
 
 // Clients bundles the AWS clients of one provisioning run.
@@ -80,6 +95,10 @@ type Clients struct {
 	SNS SNSAPI
 	IAM IAMAPI
 	S3  S3API
+	// Receipt is the SES v1 client for receipt rules (receiving).
+	Receipt SESReceiptAPI
+	// Resolver looks up DOMAIN's MX records; nil means net.DefaultResolver.
+	Resolver MXResolver
 	// Region is the AWS region every regional client talks to.
 	Region string
 }
@@ -113,12 +132,14 @@ func NewClients(ctx context.Context, getenv func(string) string) (Clients, error
 
 func clientsFromConfig(cfg aws.Config) Clients {
 	return Clients{
-		STS:    sts.NewFromConfig(cfg),
-		SES:    sesv2.NewFromConfig(cfg),
-		SNS:    sns.NewFromConfig(cfg),
-		IAM:    iam.NewFromConfig(cfg),
-		S3:     s3.NewFromConfig(cfg),
-		Region: cfg.Region,
+		STS:      sts.NewFromConfig(cfg),
+		SES:      sesv2.NewFromConfig(cfg),
+		SNS:      sns.NewFromConfig(cfg),
+		IAM:      iam.NewFromConfig(cfg),
+		S3:       s3.NewFromConfig(cfg),
+		Receipt:  ses.NewFromConfig(cfg),
+		Resolver: net.DefaultResolver,
+		Region:   cfg.Region,
 	}
 }
 
@@ -142,4 +163,7 @@ var (
 	snsNotFound = []string{"NotFound", "NotFoundException"}
 	iamNotFound = []string{"NoSuchEntity", "NoSuchEntityException"}
 	s3NotFound  = []string{"NotFound", "NoSuchBucket"}
+	// SES v1 receipt rules.
+	sesAlreadyExists = []string{"AlreadyExists", "AlreadyExistsException"}
+	sesRuleNotFound  = []string{"RuleDoesNotExist", "RuleDoesNotExistException", "RuleSetDoesNotExist", "RuleSetDoesNotExistException"}
 )

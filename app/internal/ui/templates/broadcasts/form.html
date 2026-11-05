@@ -6,6 +6,15 @@
   {{with .Form.Get "version"}}<input type="hidden" name="version" value="{{.}}">{{end}}
   {{template "form-error" .Form}}
 
+  {{if or .FromBroadcasts .FromEmails}}<section class="card mb-5" aria-labelledby="start-title">
+    <h2 id="start-title">Start from</h2>
+    <div class="starter-grid">
+      <span class="starter is-current"><span class="small muted">Blank</span><strong>Start from scratch</strong><span class="small muted">The editor below</span></span>
+      {{range .FromBroadcasts}}<a class="starter" href="{{.URL}}"><span class="small muted">Copy a broadcast · {{fmtDate .At}}</span><strong>{{.Label}}</strong><span class="small muted">{{mergeChips .Sub}}</span></a>{{end}}
+      {{range .FromEmails}}<a class="starter" href="{{.URL}}"><span class="small muted">Saved email · {{fmtDate .At}}</span><strong>{{.Label}}</strong><span class="small muted">{{mergeChips .Sub}}</span></a>{{end}}
+    </div>
+  </section>{{end}}
+
   <div class="grid grid-2">
     <section class="card" aria-labelledby="details-title">
       <h2 id="details-title">Details</h2>
@@ -20,21 +29,26 @@
 
     <section class="card" aria-labelledby="sender-title">
       <h2 id="sender-title">Sender</h2>
+      <p class="mb-3"><strong>{{or (.Form.Get "from_name") .DefaultFromName "(no name)"}}</strong> <span class="muted">&lt;{{or .FromEmail "no From address set"}}&gt;</span><br>
+        <span class="muted small">{{if .Form.Checked "no_reply_to"}}No Reply-To: replies go to the From address.{{else}}Replies go to {{or (.Form.Get "reply_to") .DefaultReplyTo "the From address"}}.{{end}}</span></p>
+      <details{{if or (.Form.Err "from_name") (.Form.Err "reply_to") (.Form.Err "no_reply_to")}} open{{end}}><summary class="btn btn-sm">Change sender for this broadcast</summary>
+      <div class="mt-3">
       {{template "field" (dict "Form" .Form "Name" "from_name" "Label" "From name" "Optional" true "Autocomplete" "off" "Placeholder" .DefaultFromName "Hint" (printf "Leave empty for the default from the settings: %s <%s>." (or .DefaultFromName "(none)") (or .FromEmail "no From address set")))}}
       {{template "field" (dict "Form" .Form "Name" "reply_to" "Label" "Reply-To address" "Type" "email" "Optional" true "Autocomplete" "off" "Placeholder" .DefaultReplyTo "Hint" (printf "Must be on %s. Leave empty for the default: %s." (or .Domain "the sending domain") (or .DefaultReplyTo "no Reply-To")))}}
       {{template "checkbox-field" (dict "Form" .Form "Name" "no_reply_to" "Label" "Send without a Reply-To address" "Hint" "Replies then go to the From address.")}}
+      </div></details>
     </section>
   </div>
 
   <section class="card" aria-labelledby="content-title">
     <h2 id="content-title">Content</h2>
-    {{template "email-editor" (dict "Form" .Form)}}
+    {{template "email-editor" (dict "Form" .Form "Me" $.Session.Email "Audience" true)}}
   </section>
 
-  <div class="form-actions">
-    <button class="btn btn-primary" type="submit">{{if .Broadcast}}Save changes{{else}}Save draft{{end}}</button>
+  <div class="form-actions sticky-actions">
+    <button class="btn btn-primary" type="submit">{{if .Broadcast}}Save changes{{else}}Save and continue{{end}}</button>
     <a class="btn" href="{{if .Broadcast}}/admin/broadcasts/{{.Broadcast.ID}}{{else}}/admin/broadcasts{{end}}">Cancel</a>
-    <span class="muted small">Nothing is sent when you save.</span>
+    <span class="muted small">Nothing is sent when you save. Next you check everything and choose when it goes out.</span>
   </div>
 </form>
 {{end}}{{end}}

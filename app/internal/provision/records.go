@@ -30,7 +30,9 @@ type Record struct {
 
 // RecordsInput describes the install whose records Records lists.
 type RecordsInput struct {
-	Domain            string
+	Domain string
+	// InboundDomain, when set (receiving on), adds its MX record to SES.
+	InboundDomain     string
 	AppSubdomain      string // A/AAAA records need it together with IPv4/IPv6
 	MailFromSubdomain string
 	Region            string
@@ -98,6 +100,10 @@ func Records(in RecordsInput) []Record {
 		Record{Type: "MX", Name: mailFrom, Value: "feedback-smtp." + in.Region + ".amazonses.com", TTL: DefaultTTL, Priority: 10, Purpose: "custom MAIL FROM: receives bounces"},
 		Record{Type: "TXT", Name: mailFrom, Value: SPFValue, TTL: DefaultTTL, Purpose: "SPF for the MAIL FROM domain"},
 	)
+	if inbound := normalizeDomain(in.InboundDomain); inbound != "" {
+		out = append(out, Record{Type: "MX", Name: inbound, Value: InboundMXHost(in.Region), TTL: DefaultTTL, Priority: 10,
+			Purpose: "receiving: mail to addresses on " + inbound + " goes to Mailroom's inbox"})
+	}
 	if in.DMARC {
 		out = append(out, dmarcRecord(domain, in.OwnerEmail))
 	}

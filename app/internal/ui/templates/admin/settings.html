@@ -19,14 +19,14 @@
   <section class="card" aria-labelledby="company-title">
     <h2 id="company-title">Company and notifications</h2>
     {{template "textarea-field" (dict "Form" .Form "Name" "company_footer" "Label" "Company footer" "Rows" 3 "Hint" "Shown at the bottom of every marketing email: company name, postal address, registration number.")}}
-    <p class="small mb-4">The logo, brand colour and layout of every email are set in the <a href="/admin/layout">base layout</a> (Content, Base layout).</p>
+    <p class="small mb-4">The logo, brand colour and layout of every email are set in the <a href="/admin/layout">base layout</a> (Emails, Layout).</p>
     {{template "field" (dict "Form" .Form "Name" "owner_email" "Label" "Owner email" "Type" "email" "Autocomplete" "email" "Hint" "Receives test sends and, unless an alert address is set, alerts.")}}
     {{template "field" (dict "Form" .Form "Name" "alert_email" "Label" "Alert email" "Type" "email" "Optional" true "Hint" "Where alerts go (circuit breaker, SES paused, backup failed). Empty means the owner email.")}}
     <div class="field">
       <label for="f-timezone">Time zone</label>
       <input id="f-timezone" name="timezone" type="text" required list="f-timezone-list" autocomplete="off" value="{{.Form.Get "timezone"}}"{{if .Form.Err "timezone"}} aria-invalid="true" aria-describedby="f-timezone-error"{{else}} aria-describedby="f-timezone-hint"{{end}}>
       <datalist id="f-timezone-list">{{range .Timezones}}<option value="{{.}}">{{end}}</datalist>
-      {{with .Form.Err "timezone"}}<p class="error-text" id="f-timezone-error">{{.}}</p>{{else}}<p class="hint" id="f-timezone-hint">An IANA time zone such as Europe/London. Used for send windows, schedules and every time shown here.</p>{{end}}
+      {{with .Form.Err "timezone"}}<p class="error-text" id="f-timezone-error">{{.}}</p>{{else}}<p class="hint" id="f-timezone-hint">Start typing a city, e.g. Europe/Copenhagen. Used for send windows, schedules and every time shown here.</p>{{end}}
     </div>
   </section>
 
@@ -36,19 +36,22 @@
     {{template "checkbox-field" (dict "Form" .Form "Name" "tracking.opens" "Label" "Track opens" "Hint" "Adds a tracking pixel. Unreliable since Apple Mail privacy protection, so off by default.")}}
   </section>
 
-  <section class="card" aria-labelledby="rate-title">
+  <details class="card advanced-card"{{if or (.Form.Err "sending.rate_override_per_sec") (.Form.Err "sending.rate_fraction") (.Form.Err "circuit_breaker.min_messages") (.Form.Err "circuit_breaker.hard_bounce_rate") (.Form.Err "circuit_breaker.complaint_rate")}} open{{end}}>
+  <summary><strong>Advanced: sending speed and safety limits</strong> <span class="muted small">The defaults are safe; change them only if you know why.</span></summary>
+  <section aria-labelledby="rate-title">
     <h2 id="rate-title">Send rate</h2>
     {{template "field" (dict "Form" .Form "Name" "sending.rate_override_per_sec" "Label" "Fixed rate (emails per second)" "Inputmode" "decimal" "Hint" "0 means automatic: a share of the SES maximum rate (below). At most 1000.")}}
     {{template "field" (dict "Form" .Form "Name" "sending.rate_fraction" "Label" "Share of the SES maximum rate" "Inputmode" "decimal" "Hint" "Used when the fixed rate is 0. A fraction above 0 and at most 1: 0.8 uses 80 % of the SES rate.")}}
   </section>
 
-  <section class="card" aria-labelledby="breaker-title">
+  <section aria-labelledby="breaker-title" class="mt-5">
     <h2 id="breaker-title">Circuit breaker</h2>
     <p class="muted small">A broadcast pauses by itself when its bounce or complaint rate gets too high, and the owner is alerted.</p>
     {{template "field" (dict "Form" .Form "Name" "circuit_breaker.min_messages" "Label" "Check after this many emails" "Inputmode" "numeric" "Hint" "The rates are only checked once a broadcast has sent this many emails (1 to 1,000,000).")}}
     {{template "field" (dict "Form" .Form "Name" "circuit_breaker.hard_bounce_rate" "Label" "Hard-bounce rate limit" "Inputmode" "decimal" "Hint" "A fraction: 0.05 pauses above 5 % hard bounces.")}}
     {{template "field" (dict "Form" .Form "Name" "circuit_breaker.complaint_rate" "Label" "Complaint rate limit" "Inputmode" "decimal" "Hint" "A fraction: 0.001 pauses above 0.1 % spam complaints.")}}
   </section>
+  </details>
 
   <section class="card" aria-labelledby="window-title">
     <h2 id="window-title">Default send window</h2>

@@ -226,7 +226,10 @@ func goodResolver() *fakeResolver {
 			"tok2._domainkey.example.com": "tok2.dkim.amazonses.com.",
 			"tok3._domainkey.example.com": "TOK3.dkim.amazonses.com",
 		},
-		mx: map[string][]*net.MX{"bounce.example.com": {{Host: "feedback-smtp.eu-west-1.amazonses.com.", Pref: 10}}},
+		mx: map[string][]*net.MX{
+			"bounce.example.com": {{Host: "feedback-smtp.eu-west-1.amazonses.com.", Pref: 10}},
+			"example.com":        {{Host: "inbound-smtp.eu-west-1.amazonaws.com.", Pref: 10}},
+		},
 		txt: map[string][]string{
 			"bounce.example.com": {"v=spf1 include:amazonses.com ~all"},
 			"_dmarc.example.com": {"v=DMARC1; p=none; rua=mailto:owner@example.org"},
@@ -315,6 +318,8 @@ func testConfig(dataDir string) config.Config {
 		AWSRegion:           "eu-west-1",
 		SESConfigurationSet: "mailroom",
 		SNSTopicARN:         "arn:aws:sns:eu-west-1:123456789012:mailroom",
+		InboundBucket:       "mailroom-inbound-123456789012-eu-west-1",
+		InboundDomain:       "example.com",
 		Secret:              []byte("0123456789abcdef0123456789abcdef"),
 		HTTPAddr:            ":8080",
 	}

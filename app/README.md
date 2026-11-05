@@ -20,7 +20,7 @@ app/
   cmd/mailroom/        the binary: subcommand dispatch (one cmd_*.go file per command)
   internal/            all Go packages (see the map below)
   docs/                Markdown docs embedded in the binary (package docs)
-  static/              admin UI assets embedded in the binary: htmx.min.js (vendored, see VENDOR.md), app.css, app.js
+  static/              admin UI assets embedded in the binary: htmx.min.js (vendored, see VENDOR.md), app.css, app.js, editor.js
   api/openapi.yaml     OpenAPI snapshot, checked by a test
   vendor/              vendored Go modules (go mod vendor), committed for offline builds
   Dockerfile           multi-stage build: golang:alpine → distroless/static, non-root uid 65532
@@ -57,6 +57,7 @@ Package map. Foundation packages come first. A domain package imports only found
 | `internal/broadcasts` | Broadcasts, state machine, audience snapshot job, starter worker, circuit breaker, stats, web archive `/archive/{id}` |
 | `internal/forms` | Forms CRUD, public `/f/*` endpoints (hosted page, submit with CORS, honeypot, rate limit), double opt-in, expiry worker |
 | `internal/imports` | Contacts CSV import with dry run, as a resumable job |
+| `internal/inbound` | Receiving email: SES receipt notifications, the `inbound-fetcher` worker (S3, MIME parsing, attachments), the Inbox API and replies (message kind `reply`) |
 | `internal/stats` | Dashboard numbers (`GET /api/v1/stats/dashboard`) |
 | `internal/app` | Wiring: builds every service, registers API operations, jobs, hooks, public routes, the UI and the workers. Also holds the end-to-end tests |
 | `internal/ui` | Admin UI under `/admin/`: html/template + htmx, action registry, parity test |

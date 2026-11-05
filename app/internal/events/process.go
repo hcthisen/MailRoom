@@ -46,6 +46,9 @@ var eventTypes = map[string]string{
 // processNotification applies the SES event carried by a verified SNS
 // Notification in one transaction. Ignored event types return nil.
 func (s *Service) processNotification(ctx context.Context, env Envelope) error {
+	if isReceived(env.Message) {
+		return s.processReceived(ctx, env)
+	}
 	ev, ok, err := parseSESEvent(env.Message)
 	if err != nil {
 		return err
@@ -57,6 +60,31 @@ func (s *Service) processNotification(ctx context.Context, env Envelope) error {
 	return s.db.WithTx(ctx, func(tx *sql.Tx) error {
 		return s.applyEvent(ctx, tx, env.MessageID, env.Message, ev)
 	})
+}
+
+// isReceived reports whether an SES notification is a receipt
+// notification (received mail, notificationType "Received").
+func isReceived(message string) bool {
+	var n struct {
+		NotificationType string `json:"notificationType"`
+	}
+	return json.Unmarshal([]byte(message), &n) == nil && n.NotificationType == "Received"
+}
+
+// processReceived hands a receipt notification to the inbound receiver in
+// one transaction. Without a receiver it is ignored.
+func (s *Service) processReceived(ctx context.Context, env Envelope) error {
+	if s.inbound == nil {
+		s.log.Warn("events: SES receipt notification, but receiving is not wired; ignored", "message_id", env.MessageID)
+		return nil
+	}
+	err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
+		return s.inbound.Received(ctx, tx, env.MessageID, env.Message)
+	})
+	if errors.Is(err, core.ErrValidation) {
+		return fmt.Errorf("%w: %v", errMalformed, err)
+	}
+	return err
 }
 
 // messageRow is the part of a messages row event processing needs.

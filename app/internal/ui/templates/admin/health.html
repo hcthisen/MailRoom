@@ -2,7 +2,7 @@
 {{.Tabs.HTML}}
 <div class="stack">
 <section class="card" aria-labelledby="sending-title">
-  <div class="card-header"><h2 id="sending-title">Sending</h2>{{if .Sending.Paused}}{{badge "" "paused"}}{{else if not .SendingErr}}{{badge "" "active"}}{{end}}</div>
+  <div class="card-header"><h2 id="sending-title">Sending</h2>{{if .Sending.Paused}}{{badge "" "paused"}}{{else if not sesReady}}{{badge "" "warn"}} <span class="small">on hold</span>{{else if not .SendingErr}}{{badge "" "active"}}{{end}}</div>
   {{with .SendingErr}}<p class="muted">{{.}}</p>{{else}}{{if .Sending.Paused}}
     <p><strong>All sending is paused.</strong> Nothing is sent (broadcasts, sequence steps, confirmations, tests or alerts) until it is resumed. Queued emails are kept.</p>
     <dl class="props">
@@ -15,7 +15,8 @@
       <form method="post" action="/admin/health/sending/resume" class="inline">{{template "csrf" $}}<button class="btn btn-primary" type="submit">Resume sending…</button></form>
     </div>
   {{else}}
-    <p>Emails are being sent normally. Pause to stop every kind of email at once, for example while you check a list or after a mistake. Queued emails are kept.</p>
+    {{if not sesReady}}<p><strong>Nothing can go out yet: Amazon SES isn't connected.</strong> {{num .Health.QueueDepth}} emails are waiting and go out once it is set up. Send this page to the person who installed Mailroom.{{else}}
+    <p>Emails are being sent normally.{{end}} Pause to stop every kind of email at once, for example while you check a list or after a mistake. Queued emails are kept.</p>
     <form method="post" action="/admin/health/sending/pause" novalidate>
       {{template "csrf" $}}
       {{template "field" (dict "Form" .PauseForm "Name" "reason" "Label" "Reason" "Optional" true "Hint" "Shown here and in the audit log (at most 500 characters).")}}
@@ -77,7 +78,7 @@
   </div>
   {{with .Data.Doctor}}
     <ul class="checks">
-      {{range .Checks}}<li><span>{{badge "" (printf "%s" .Status)}}</span><div><span class="name mono">{{.Name}}</span><p class="small">{{.Message}}</p>{{with .FixHint}}<p class="fix">Fix: {{.}}</p>{{end}}</div></li>
+      {{range .Checks}}<li><span>{{badge "" (printf "%s" .Status)}}</span><div><span class="name">{{checkLabel .Name}}</span> <code class="muted small">{{.Name}}</code><p class="small">{{.Message}}</p>{{with .FixHint}}<p class="fix">Fix: {{.}}</p>{{end}}</div></li>
       {{end}}
     </ul>
     <p class="muted small">Checked {{ago .CheckedAt}} ({{fmtTime .CheckedAt}}), took {{.DurationMS}} ms. The checks also run by themselves every 10 minutes.</p>

@@ -118,8 +118,11 @@ func TestAutomationSequenceSettings(t *testing.T) {
 	// Pause and resume.
 	c.postNoCSRF(p+"/pause", url.Values{"version": {autoSeqVersion(hs, id)}}).want(t, http.StatusForbidden)
 	c.post(p+"/pause", url.Values{"version": {autoSeqVersion(hs, id)}}).wantRedirect(t, p)
-	c.get(p).want(t, http.StatusOK).contains(t, "This sequence is paused", "Resume")
-	c.post(p+"/resume", url.Values{"version": {autoSeqVersion(hs, id)}}).wantRedirect(t, p)
+	c.get(p).want(t, http.StatusOK).contains(t, "This sequence is off", "Turn on…")
+	// Activating asks first, with what will happen.
+	c.post(p+"/resume", url.Values{"version": {autoSeqVersion(hs, id)}}).want(t, http.StatusOK).
+		contains(t, "Turn on Welcome drip?", "Turn on sequence", `name="confirm" value="yes"`)
+	c.post(p+"/resume", url.Values{"version": {autoSeqVersion(hs, id)}, "confirm": {"yes"}}).wantRedirect(t, p)
 	if n := hs.count(`SELECT count(*) FROM sequences WHERE id = ? AND status = 'active'`, id); n != 1 {
 		t.Fatal("not resumed")
 	}
@@ -154,7 +157,7 @@ func TestAutomationSequenceSteps(t *testing.T) {
 
 	// Edit: the email and the delay are prefilled; saving changes both.
 	c.get(sp).want(t, http.StatusOK).contains(t, "<h1>Step 2</h1>", `value="Two days in"`, `name="delay_value" type="number" value="2"`,
-		`<option value="d" selected>days</option>`, "Send a test", "owner@example.org")
+		`<option value="d" selected>days</option>`, "Send a test email", "owner@example.org")
 	c.post(sp, url.Values{"version": {autoSeqVersion(hs, id)}, "delay_value": {"36"}, "delay_unit": {"h"},
 		"subject": {"Day two"}, "preheader": {""}, "format": {"markdown"}, "body": {"New body"}}).wantRedirect(t, p)
 	if n := hs.count(`SELECT delay_seconds FROM sequence_steps WHERE id = ?`, step2); n != 36*3600 {
@@ -167,8 +170,8 @@ func TestAutomationSequenceSteps(t *testing.T) {
 		"subject": {""}, "format": {"markdown"}, "body": {"x"}}).want(t, http.StatusUnprocessableEntity).contains(t, `id="f-subject-error"`)
 
 	// Test send: to the owner by default, an invalid address is shown at the field.
-	c.post(sp+"/test", url.Values{"to": {"not-an-address"}}).want(t, http.StatusUnprocessableEntity).
-		contains(t, `id="f-to-error"`, "is not a valid email address")
+	c.post(sp+"/test", url.Values{"to": {"not-an-address"}}).wantRedirect(t, sp)
+	c.get(sp).want(t, http.StatusOK).contains(t, "The test was not sent", "is not a valid email address")
 	c.post(sp+"/test", url.Values{"to": {""}}).wantRedirect(t, sp)
 	if n := hs.count(`SELECT count(*) FROM messages WHERE kind = 'test' AND to_email = 'owner@example.org'`); n != 1 {
 		t.Fatalf("%d test messages to the owner", n)

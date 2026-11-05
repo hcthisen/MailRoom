@@ -1,9 +1,18 @@
-{{/* One broadcast: overview, send controls, test send and preview.
-.Data is ui.broadcastShowData. */}}
+{{/* One broadcast. A draft or scheduled one shows the pre-send checklist,
+the send/schedule card and the preview with "Preview as" and the test
+send (the editor's component); a started one its overview, send controls
+and numbers. .Data is ui.broadcastShowData. */}}
 {{define "actions"}}{{with .Data}}
-{{if .Editable}}<a class="btn btn-primary" href="/admin/broadcasts/{{.B.ID}}/edit">Edit</a>{{end}}
-<a class="btn" href="/admin/broadcasts/{{.B.ID}}/stats">Stats</a>
-{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/broadcasts/%d/duplicate" .B.ID) "Label" "Duplicate" "Class" " ")}}
+{{if .Editable}}<a class="btn" href="/admin/broadcasts/{{.B.ID}}/edit">Edit content</a>{{end}}
+{{if .Started}}<a class="btn" href="/admin/broadcasts/{{.B.ID}}/stats">Stats</a>{{end}}
+<details class="menu">
+  <summary class="btn btn-icon" aria-label="More actions" title="More actions">⋯</summary>
+  <div class="menu-items">
+    {{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/broadcasts/%d/duplicate" .B.ID) "Label" "Duplicate" "Class" "menu-item")}}
+    {{if .CanCancel}}<form method="post" action="/admin/broadcasts/{{.B.ID}}/cancel" class="inline">{{template "csrf" $}}<input type="hidden" name="version" value="{{.B.Version}}"><button class="btn menu-item" type="submit">Cancel broadcast…</button></form>{{end}}
+    {{if .CanDelete}}<form method="post" action="/admin/broadcasts/{{.B.ID}}/delete" class="inline">{{template "csrf" $}}<input type="hidden" name="version" value="{{.B.Version}}"><button class="btn menu-item is-danger" type="submit">Delete…</button></form>{{end}}
+  </div>
+</details>
 {{end}}{{end}}
 
 {{define "content"}}{{with .Data}}
@@ -12,13 +21,73 @@
 {{if .SnapshotFailed}}<div class="flash flash-error" role="alert"><p><strong>The recipient list could not be built.</strong> The audience segment may have been changed so it no longer works. Fix the segment, then retry.</p></div>{{end}}
 {{with .Stats.MissingTags}}<div class="flash flash-warning" role="status"><p><strong>Check the segment:</strong> it refers to tags that don't exist ({{join . ", "}}). Rules on them match nobody, or everybody for "doesn't have".</p></div>{{end}}
 
+{{if .Editable}}
+{{with .Checklist}}<div class="send-grid">
+  <section class="card" aria-labelledby="check-title">
+    <div class="card-header"><h2 id="check-title">{{if .Ready}}Ready to send{{else}}Before you send{{end}}</h2>
+      <span class="spacer"></span>{{if .Ready}}<span class="badge badge-ok">All set</span>{{else}}<span class="badge badge-warn">{{plural .Todo "item" "items"}} to check</span>{{end}}</div>
+    <ul class="checklist">
+      <li class="{{if gt .Recipients 0}}is-ok{{else}}is-todo{{end}}">
+        <span class="ck" aria-hidden="true"></span>
+        <div><strong>To</strong><p>{{template "audience" $.Data.B.Audience}} · <strong>{{plural .Recipients "active contact" "active contacts"}}</strong>{{if eq .Recipients 0}} <span class="error-text">Nobody would receive it.</span>{{end}}</p></div>
+        <a class="btn btn-sm btn-ghost" href="/admin/broadcasts/{{$.Data.B.ID}}/edit">Edit</a>
+      </li>
+      <li class="is-ok">
+        <span class="ck" aria-hidden="true"></span>
+        <div><strong>From</strong><p>{{if $.Data.B.FromName}}{{$.Data.B.FromName}}{{else}}{{or $.Data.DefaultFromName "(no name)"}}{{end}} &lt;{{or $.Data.FromEmail "no From address set"}}&gt;{{with $.Data.ReplyTo}} · replies go to {{.}}{{end}}</p></div>
+        <a class="btn btn-sm btn-ghost" href="/admin/broadcasts/{{$.Data.B.ID}}/edit">Edit</a>
+      </li>
+      <li class="is-ok">
+        <span class="ck" aria-hidden="true"></span>
+        <div><strong>Subject</strong><p>{{.Subject}}{{with .SampleName}} <span class="muted small">(as {{.}} sees it)</span>{{end}}</p>
+          {{if not $.Data.B.Email.Preheader}}<p class="muted small">No preview text. Inboxes then show the first words of the email instead; adding a line usually gets more opens.</p>{{end}}</div>
+        <a class="btn btn-sm btn-ghost" href="/admin/broadcasts/{{$.Data.B.ID}}/edit">Edit</a>
+      </li>
+      {{range .Gaps}}<li class="is-warn">
+        <span class="ck" aria-hidden="true"></span>
+        <div><strong>Personalisation</strong><p>{{num .Missing}} of {{num .Total}} contacts have no {{.Label}}, and {{mergeChips (printf "{{%s}}" .Field)}} has no fallback, so they would see a gap like "Hi ,". In the editor, insert it again with Personalise and fill in what they should see instead, e.g. "there".</p></div>
+        <a class="btn btn-sm btn-ghost" href="/admin/broadcasts/{{$.Data.B.ID}}/edit">Fix</a>
+      </li>{{end}}
+      <li class="{{if .TestDelivered}}is-ok{{else if .LastTest}}is-warn{{else}}is-todo{{end}}">
+        <span class="ck" aria-hidden="true"></span>
+        <div><strong>Test email</strong><p>{{if .TestDelivered}}Last test sent {{ago .LastTest}}.{{else if .LastTest}}{{if or (eq .TestStatus "queued") (eq .TestStatus "sending")}}Test queued {{ago .LastTest}}, not delivered yet{{if not sesReady}}: email sending isn't connected{{end}}.{{else}}The last test ({{ago .LastTest}}) was not delivered: {{.TestStatus}}. Check the address and try again.{{end}}{{else}}Not sent yet. Send yourself one and check it on your phone.{{end}}</p></div>
+        <button type="button" class="btn btn-sm" data-open-test>Send test</button>
+      </li>
+    </ul>
+  </section>
+
+  <section class="card" aria-labelledby="send-title">
+    <h2 id="send-title">{{if eq $.Data.B.Status "scheduled"}}Scheduled{{else}}Send or schedule{{end}}</h2>
+    {{$id := $.Data.B.ID}}{{$v := printf "%d" $.Data.B.Version}}
+    {{if not sesReady}}<div class="form-error" role="status"><strong>Email sending isn't connected yet.</strong> You can schedule this, but nothing goes out until Amazon SES is set up. <a href="/admin/health">Details</a></div>{{end}}
+    {{if eq $.Data.B.Status "scheduled"}}
+      <p class="big-when">{{fmtTime $.Data.B.ScheduledAt}}</p>
+      <p class="muted">{{ago $.Data.B.ScheduledAt}} ({{timezone}}). It starts by itself; you can still edit it until then.</p>
+      <div class="row">
+        {{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "/admin/broadcasts/%d/unschedule" $id) "Label" "Unschedule" "Class" " " "Fields" (dict "version" $v))}}
+        <form method="post" action="/admin/broadcasts/{{$id}}/send" class="inline">{{template "csrf" $}}<input type="hidden" name="version" value="{{$v}}"><button class="btn btn-ghost" type="submit">Send now instead…</button></form>
+      </div>
+    {{else}}
+      <form method="post" action="/admin/broadcasts/{{$id}}/schedule" novalidate>
+        {{template "csrf" $}}<input type="hidden" name="version" value="{{$v}}">
+        {{template "form-error" $.Data.ScheduleForm}}
+        {{template "field" (dict "Form" $.Data.ScheduleForm "Name" "at" "Label" "Send at" "Type" "datetime-local" "Required" true "Hint" (printf "In %s. You confirm the number of recipients on the next page." timezone))}}
+        <button class="btn btn-primary btn-block" type="submit">Schedule…</button>
+      </form>
+      <div class="or"><span>or</span></div>
+      <form method="post" action="/admin/broadcasts/{{$id}}/send">{{template "csrf" $}}<input type="hidden" name="version" value="{{$v}}"><button class="btn btn-block" type="submit">Send now…</button></form>
+      <p class="muted small mt-3">Both ask you to confirm and show the exact number of recipients first. Nothing is sent before that.</p>
+    {{end}}
+  </section>
+</div>{{end}}
+{{else}}
 <div class="grid grid-2">
   <section class="card" aria-labelledby="overview-title">
     <h2 id="overview-title">Overview</h2>
     <dl class="props">
       <dt>Status</dt><dd>{{badge "broadcast" .B.Status}}{{with .B.PausedReason}} <span class="muted small">{{template "paused-reason" .}}</span>{{end}}</dd>
       <dt>Audience</dt><dd>{{template "audience" .B.Audience}}</dd>
-      <dt>Subject</dt><dd>{{.B.Email.Subject}}</dd>
+      <dt>Subject</dt><dd>{{mergeChips .B.Email.Subject}}</dd>
       {{with .B.Email.Preheader}}<dt>Preheader</dt><dd>{{.}}</dd>{{end}}
       <dt>From</dt><dd>{{if .B.FromName}}{{.B.FromName}}{{else}}{{or .DefaultFromName "(no name)"}} <span class="muted small">(default)</span>{{end}} <span class="muted">&lt;{{or .FromEmail "no From address set"}}&gt;</span></dd>
       <dt>Reply-To</dt><dd>{{or .ReplyTo "none"}}{{if not .B.ReplyTo}} <span class="muted small">(default)</span>{{end}}</dd>
@@ -96,30 +165,9 @@
 </section>
 {{end}}
 
-<div class="grid grid-2">
-  <section class="card" aria-labelledby="test-title">
-    <h2 id="test-title">Send a test</h2>
-    <form method="post" action="/admin/broadcasts/{{.B.ID}}/test" novalidate>
-      {{template "csrf" $}}
-      {{template "form-error" .TestForm}}
-      {{template "textarea-field" (dict "Form" .TestForm "Name" "to" "Label" "Send to" "Rows" 2 "Required" true "Hint" "Up to 5 addresses, separated by commas or new lines. Addresses that unsubscribed, bounced or are suppressed are skipped.")}}
-      {{template "field" (dict "Form" .TestForm "Name" "contact" "Label" "Use the data of contact" "Type" "text" "Optional" true "Autocomplete" "off" "Placeholder" "e.g. anna@example.org" "Hint" "A contact's email address (or ID): merge fields show this contact's name and attributes. Leave empty to show the fallbacks.")}}
-      <div class="form-actions"><button class="btn" type="submit">Send test</button><span class="muted small">Tests don't count in the stats.</span></div>
-    </form>
-  </section>
+{{end}}
 
-  <section class="card preview-panel" aria-labelledby="preview-title">
-    <div class="card-header"><h2 id="preview-title">Preview</h2><span class="htmx-indicator muted small">Updating…</span></div>
-    <form class="filters" method="post" action="/admin/broadcasts/{{.B.ID}}/preview"
-          hx-post="/admin/broadcasts/{{.B.ID}}/preview" hx-trigger="load, submit" hx-target="#broadcast-preview" hx-swap="innerHTML" hx-sync="this:replace">
-      {{template "csrf" $}}
-      <div class="field grow">
-        <label for="preview-contact">Show with the data of contact <span class="optional">(optional)</span></label>
-        <input id="preview-contact" name="preview_contact" type="text" autocomplete="off" placeholder="A contact's email address (or ID)">
-      </div>
-      <button class="btn" type="submit">Update preview</button>
-    </form>
-    <div id="broadcast-preview" aria-live="polite"><p class="muted">Loading the preview…</p></div>
-  </section>
-</div>
+<section class="card mt-5" aria-label="Preview and test">
+  {{template "saved-preview" (dict "B" .B "Me" $.Session.Email "FromName" .OwnFromName "ReplyTo" .ReplyTo)}}
+</section>
 {{end}}{{end}}

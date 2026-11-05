@@ -83,6 +83,9 @@ var buttonLabels = map[string]string{
 // Data: optin_confirm takes confirm_url (required) and form_name;
 // resubscribe_confirm takes confirm_url; alert takes title and body.
 func (s *Service) renderSystem(ctx context.Context, in core.RenderInput) (core.Rendered, error) {
+	if in.SystemTemplate == core.TemplateReply {
+		return renderReply(in.Data)
+	}
 	st, err := s.settings.Get(ctx)
 	if err != nil {
 		return core.Rendered{}, err

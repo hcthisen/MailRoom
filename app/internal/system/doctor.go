@@ -49,6 +49,7 @@ const (
 	CheckDNSDKIM         = "dns_dkim"
 	CheckDNSMailFrom     = "dns_mail_from"
 	CheckDNSDMARC        = "dns_dmarc"
+	CheckInbound         = "inbound"
 	CheckSESIdentity     = "ses_identity"
 	CheckSESProduction   = "ses_production"
 	CheckSESSending      = "ses_sending"
@@ -128,6 +129,7 @@ var allChecks = []checkDef{
 	{CheckDNSDKIM, (*doctorRun).checkDNSDKIM},
 	{CheckDNSMailFrom, (*doctorRun).checkDNSMailFrom},
 	{CheckDNSDMARC, (*doctorRun).checkDNSDMARC},
+	{CheckInbound, (*doctorRun).checkInbound},
 	{CheckSESIdentity, (*doctorRun).checkSESIdentity},
 	{CheckSESProduction, (*doctorRun).checkSESProduction},
 	{CheckSESSending, (*doctorRun).checkSESSending},

@@ -108,7 +108,8 @@ builder on change: the field and operator selects). */}}
 </div>{{end}}
 
 {{/* segment-preview-body: the live count and sample. */}}
-{{define "segment-preview-body"}}{{if .Error}}<p class="muted">Complete the rules to see the count.</p>
+{{define "segment-preview-body"}}{{if .Incomplete}}<p class="muted">Finish the condition to see who matches.</p>
+{{else if .Error}}<p class="muted">Complete the rules to see the count.</p>
 <p class="preview-error" role="status">{{.Error}}</p>
 {{else if .Counted}}{{with .P}}
 <div class="grid stats mb-3">

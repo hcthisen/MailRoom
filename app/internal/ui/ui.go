@@ -43,6 +43,7 @@ import (
 	"mailroom/internal/db"
 	"mailroom/internal/forms"
 	"mailroom/internal/imports"
+	"mailroom/internal/inbound"
 	"mailroom/internal/jobs"
 	"mailroom/internal/segments"
 	"mailroom/internal/sending"
@@ -85,6 +86,8 @@ type Deps struct {
 	Forms      *forms.Service
 	Imports    *imports.Service
 	Stats      *stats.Service
+	// Inbound is the Inbox (received email). Nil hides it.
+	Inbound *inbound.Service
 
 	// DoctorInterval is how often DoctorWorker runs the doctor checks
 	// (default DefaultDoctorInterval).
@@ -184,6 +187,7 @@ func New(d Deps) *UI {
 	u.pages = pages
 
 	u.registerFoundation()
+	u.registerEditor()
 	groupsMu.Lock()
 	names := make([]string, 0, len(groups))
 	for n := range groups {

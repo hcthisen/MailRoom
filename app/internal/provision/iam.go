@@ -48,7 +48,11 @@ func (r *run) senderPolicy() PolicyDocument {
 	if r.bucketName != "" {
 		bucketARN = r.arns.bucket(r.bucketName)
 	}
-	return SenderPolicy(r.res.IdentityARN, r.res.ConfigurationSetARN, r.res.TopicARN, bucketARN, r.in.WebhookURL)
+	inboundARN := ""
+	if r.receive {
+		inboundARN = r.arns.bucket(r.res.InboundBucket)
+	}
+	return SenderPolicy(r.res.IdentityARN, r.res.ConfigurationSetARN, r.res.TopicARN, bucketARN, r.in.WebhookURL, inboundARN)
 }
 
 func (r *run) iamPolicy(ctx context.Context) error {
@@ -119,6 +123,8 @@ func (r *run) accessKeyAndEnv(ctx context.Context) error {
 		"SNS_TOPIC_ARN":         r.res.TopicARN,
 		"SES_CONFIGURATION_SET": r.in.ConfigurationSet,
 		"BACKUP_BUCKET":         r.bucketName,
+		"INBOUND_BUCKET":        r.res.InboundBucket,
+		"INBOUND_DOMAIN":        r.res.InboundDomain,
 	}
 
 	var created *iamtypes.AccessKey

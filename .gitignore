@@ -4,3 +4,4 @@
 secrets/
 ghl-export/**/*.json
 ghl-export/**/*.csv
+.claude/

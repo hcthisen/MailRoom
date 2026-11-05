@@ -10,6 +10,7 @@ import (
 	_ "github.com/aws/aws-sdk-go-v2/credentials"
 	_ "github.com/aws/aws-sdk-go-v2/service/iam"
 	_ "github.com/aws/aws-sdk-go-v2/service/s3"
+	_ "github.com/aws/aws-sdk-go-v2/service/ses"
 	_ "github.com/aws/aws-sdk-go-v2/service/sesv2"
 	_ "github.com/aws/aws-sdk-go-v2/service/sns"
 	_ "github.com/aws/aws-sdk-go-v2/service/sts"

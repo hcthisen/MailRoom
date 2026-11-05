@@ -24,7 +24,7 @@
     </tr></thead>
     <tbody>
     {{range .Items}}<tr>
-      <td><a href="/admin/emails/{{.ID}}"><strong>{{or .Name .Subject}}</strong></a>{{if .Name}}<br><span class="muted small">{{truncate 80 .Subject}}</span>{{end}}</td>
+      <td><a href="/admin/emails/{{.ID}}"><strong>{{if .Name}}{{.Name}}{{else}}{{mergeChips .Subject}}{{end}}</strong></a>{{if .Name}}<br><span class="muted small">{{mergeChips (truncate 80 .Subject)}}</span>{{end}}</td>
       <td>{{template "email-uses" .}}</td>
       <td>{{if eq .Format "html"}}HTML{{else}}Markdown{{end}}</td>
       <td class="num nowrap">{{bytes .BodyBytes}}</td>

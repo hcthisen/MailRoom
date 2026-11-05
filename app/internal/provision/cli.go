@@ -50,7 +50,7 @@ func DNSCommand(ctx context.Context, args []string, stdout, stderr io.Writer, ge
 }
 
 const provisionUsage = `usage:
-  mailroom provision ses [--env-file FILE] [--no-backup-bucket] [--rotate-keys] [--json]
+  mailroom provision ses [--env-file FILE] [--no-backup-bucket] [--no-receive] [--rotate-keys] [--json]
   mailroom provision ses --request-production --use-case FILE [--json]
   mailroom provision dns --cloudflare [--ipv4 IP] [--ipv6 IP] [--dmarc] [--yes] [--json]
 
@@ -226,6 +226,7 @@ func (c *CLI) desiredRecords(ctx context.Context, getenv func(string) string, ip
 		MailFromSubdomain: env.MailFromSubdomain,
 		OwnerEmail:        env.OwnerEmail,
 		Region:            strings.TrimSpace(getenv("AWS_REGION")),
+		InboundDomain:     strings.TrimSpace(getenv("INBOUND_DOMAIN")),
 		IPv4:              strings.TrimSpace(ipv4),
 		IPv6:              strings.TrimSpace(ipv6),
 		DMARC:             dmarc,

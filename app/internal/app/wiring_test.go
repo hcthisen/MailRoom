@@ -42,7 +42,7 @@ var expectedOperations = []string{
 	"get-segment-count", "list-segment-members",
 	// content
 	"list-emails", "create-email", "get-email", "get-email-usage", "update-email", "delete-email", "preview-email", "render-email",
-	"send-test-email", "get-layout", "update-layout", "preview-layout",
+	"send-test-email", "send-test-draft", "list-merge-fields", "get-layout", "update-layout", "preview-layout",
 	"upload-media", "list-media", "get-media", "delete-media",
 	// sending
 	"get-sending-state", "pause-sending", "resume-sending", "list-messages", "get-message", "list-events", "get-event", "list-clicks", "get-click",
@@ -63,6 +63,8 @@ var expectedOperations = []string{
 	"create-import", "get-import", "list-imports",
 	// stats
 	"get-dashboard-stats",
+	// inbox
+	"list-inbound", "get-inbound-counts", "get-inbound", "update-inbound", "delete-inbound", "get-inbound-attachment", "reply-inbound",
 }
 
 // TestOperationsRegisteredOnce: every package's operations are on the one

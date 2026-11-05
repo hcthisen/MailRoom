@@ -22,6 +22,11 @@ const (
 	// sent (confirmation_emails: address hash, form, time), which only
 	// their 30-day caps read, is deleted after 31 days.
 	ConfirmationLogRetention = 31 * 24 * time.Hour
+	// InboundRetention: received email (the Inbox) and its attachments are
+	// deleted a year after it arrived; messages that could not be fetched
+	// after 30 days (N-6).
+	InboundRetention       = 365 * 24 * time.Hour
+	InboundFailedRetention = 30 * 24 * time.Hour
 )
 
 // retentionBatch bounds the rows changed per transaction, so the single
@@ -34,6 +39,7 @@ type RetentionResult struct {
 	JobsDeleted         int64 `json:"jobs_deleted"`
 	SessionsDeleted     int64 `json:"sessions_deleted"`
 	ConfirmationsPurged int64 `json:"confirmations_purged"`
+	InboundDeleted      int64 `json:"inbound_deleted"`
 }
 
 // Retention applies the retention rules once:
@@ -41,7 +47,9 @@ type RetentionResult struct {
 //   - jobs that finished more than 30 days ago are deleted;
 //   - expired UI sessions are deleted (auth also prunes them at each login;
 //     this covers installs where nobody logs in);
-//   - the forms' confirmation email log older than 31 days is deleted.
+//   - the forms' confirmation email log older than 31 days is deleted;
+//   - received email older than a year is deleted, and email that could
+//     not be fetched after 30 days.
 //
 // Consent logs, status changes, suppressions and messages are never
 // deleted automatically.
@@ -76,6 +84,19 @@ func (s *Service) Retention(ctx context.Context) (RetentionResult, error) {
 	if err != nil {
 		return res, fmt.Errorf("system: retention: delete old confirmation log: %w", err)
 	}
+	res.InboundDeleted, err = s.batched(ctx,
+		`DELETE FROM inbound_messages WHERE id IN (SELECT id FROM inbound_messages WHERE received_at < ? LIMIT ?)`,
+		db.FormatTime(now.Add(-InboundRetention)))
+	if err != nil {
+		return res, fmt.Errorf("system: retention: delete old received email: %w", err)
+	}
+	n, err := s.batched(ctx,
+		`DELETE FROM inbound_messages WHERE id IN (SELECT id FROM inbound_messages WHERE status = 'failed' AND created_at < ? LIMIT ?)`,
+		db.FormatTime(now.Add(-InboundFailedRetention)))
+	if err != nil {
+		return res, fmt.Errorf("system: retention: delete failed received email: %w", err)
+	}
+	res.InboundDeleted += n
 	return res, nil
 }
 

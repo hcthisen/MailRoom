@@ -26,11 +26,14 @@ const (
 	configSetARN = "arn:aws:ses:eu-central-1:123456789012:configuration-set/mailroom"
 	topicARN     = "arn:aws:sns:eu-central-1:123456789012:mailroom-ses-events"
 	bucketName   = "mailroom-backup-123456789012-eu-central-1"
+
+	inboundBucketName = "mailroom-inbound-123456789012-eu-central-1"
+	receiptRuleARN    = "arn:aws:ses:eu-central-1:123456789012:receipt-rule-set/mailroom:receipt-rule/mailroom-inbound"
 )
 
 func sesInput(t *testing.T, envFile string) SESInput {
 	t.Helper()
-	return SESInput{Domain: testDomain, MailFromSubdomain: "bounce", EnvFile: envFile, BackupBucket: true}
+	return SESInput{Domain: testDomain, MailFromSubdomain: "bounce", EnvFile: envFile, BackupBucket: true, Receive: true}
 }
 
 func tempEnv(t *testing.T, content string) string {
@@ -53,9 +56,11 @@ func stepActions(steps []Step) map[string]Action {
 }
 
 var allSteps = []string{
-	"aws account", "ses identity", "ses mail from", "ses account suppression", "ses configuration set",
+	"aws account", "receiving", "ses identity", "ses mail from", "ses account suppression", "ses configuration set",
 	"sns topic", "sns topic policy", "ses event destination", "ses identity default configuration set",
 	"s3 bucket", "s3 public access block", "s3 encryption", "s3 versioning", "s3 lifecycle",
+	"s3 inbound bucket", "s3 inbound public access block", "s3 inbound encryption", "s3 inbound lifecycle",
+	"s3 inbound bucket policy", "ses receipt rule set", "ses receipt rule", "ses active receipt rule set",
 	"iam user", "iam policy", "iam access key", "env file",
 }
 
@@ -83,7 +88,7 @@ func TestProvisionSESFirstRunCreatesEverything(t *testing.T) {
 	for _, s := range res.Steps {
 		want := ActionCreated
 		switch s.Name {
-		case "aws account":
+		case "aws account", "receiving":
 			want = ActionUnchanged
 		case "env file":
 			// The env file existed.
@@ -153,6 +158,8 @@ func TestProvisionSESFirstRunCreatesEverything(t *testing.T) {
 		"SNS_TOPIC_ARN":         topicARN,
 		"SES_CONFIGURATION_SET": "mailroom",
 		"BACKUP_BUCKET":         bucketName,
+		"INBOUND_BUCKET":        inboundBucketName,
+		"INBOUND_DOMAIN":        testDomain,
 	}
 	if !reflect.DeepEqual(env, want) {
 		t.Errorf("env file = %v\nwant %v", env, want)
@@ -170,7 +177,7 @@ func TestProvisionSESFirstRunCreatesEverything(t *testing.T) {
 	}
 	wantRecs := []string{
 		"CNAME tok1._domainkey.example.com", "CNAME tok2._domainkey.example.com", "CNAME tok3._domainkey.example.com",
-		"MX bounce.example.com", "TXT bounce.example.com",
+		"MX bounce.example.com", "TXT bounce.example.com", "MX example.com",
 	}
 	if !slices.Equal(types, wantRecs) {
 		t.Errorf("records = %v", types)
@@ -308,6 +315,7 @@ func TestSenderPolicyDocument(t *testing.T) {
 			"SubscribeWebhook":       {{"sns:Subscribe"}, {topicARN}},
 			"ListBackups":            {{"s3:ListBucket"}, {"arn:aws:s3:::" + bucketName}},
 			"WriteBackups":           {{"s3:PutObject"}, {"arn:aws:s3:::" + bucketName + "/*"}},
+			"ReadInbound":            {{"s3:GetObject", "s3:DeleteObject"}, {"arn:aws:s3:::" + inboundBucketName + "/inbound/*"}},
 		}},
 		{"without bucket", false, map[string][2][]string{
 			"SendEmail":              {{"ses:SendEmail", "ses:SendRawEmail"}, {identityARN, configSetARN}},
@@ -315,6 +323,7 @@ func TestSenderPolicyDocument(t *testing.T) {
 			"ReadIdentity":           {{"ses:GetEmailIdentity"}, {identityARN}},
 			"ListTopicSubscriptions": {{"sns:ListSubscriptionsByTopic"}, {topicARN}},
 			"SubscribeWebhook":       {{"sns:Subscribe"}, {topicARN}},
+			"ReadInbound":            {{"s3:GetObject", "s3:DeleteObject"}, {"arn:aws:s3:::" + inboundBucketName + "/inbound/*"}},
 		}},
 	}
 	for _, tt := range tests {
@@ -415,7 +424,7 @@ func TestTopicPolicyDocument(t *testing.T) {
 	if !slices.Equal(asList(s.Action), []string{"sns:Publish"}) || !slices.Equal(asList(s.Resource), []string{topicARN}) {
 		t.Errorf("action %v resource %v", s.Action, s.Resource)
 	}
-	want := map[string]map[string]any{"StringEquals": {"AWS:SourceAccount": testAccount, "AWS:SourceArn": configSetARN}}
+	want := map[string]map[string]any{"StringEquals": {"AWS:SourceAccount": testAccount, "AWS:SourceArn": []any{configSetARN, receiptRuleARN}}}
 	if !reflect.DeepEqual(s.Condition, want) {
 		t.Errorf("condition = %v, want %v", s.Condition, want)
 	}
@@ -636,7 +645,7 @@ func guideSetupPolicy(t *testing.T) PolicyDocument {
 }
 
 // TestGuideSetupPolicyScope: the step 2.6 policy grants IAM actions on the
-// sending user only and S3 actions on the backup buckets only.
+// sending user only and S3 actions on the backup and inbound buckets only.
 func TestGuideSetupPolicyScope(t *testing.T) {
 	for _, st := range guideSetupPolicy(t).Statement {
 		for _, a := range st.Action {
@@ -644,6 +653,8 @@ func TestGuideSetupPolicyScope(t *testing.T) {
 			switch {
 			case strings.HasPrefix(a, "iam:"):
 				want = "arn:aws:iam::*:user/" + SenderUserName
+			case strings.HasPrefix(a, "s3:") && st.Sid == "CreateMailroomInboundBucket":
+				want = "arn:aws:s3:::mailroom-inbound-*"
 			case strings.HasPrefix(a, "s3:"):
 				want = "arn:aws:s3:::mailroom-backup-*"
 			default:
@@ -665,7 +676,11 @@ func TestProvisionSESWithGuideSetupPolicy(t *testing.T) {
 	for _, st := range guideSetupPolicy(t).Statement {
 		granted = append(granted, st.Action...)
 	}
-	reads := []string{"s3:GetBucketPublicAccessBlock", "s3:GetEncryptionConfiguration", "s3:GetBucketVersioning", "s3:GetLifecycleConfiguration"}
+	// The fake's allowlist knows actions, not resources: both buckets
+	// share most actions.
+	slices.Sort(granted)
+	granted = slices.Compact(granted)
+	reads := []string{"s3:GetBucketPublicAccessBlock", "s3:GetEncryptionConfiguration", "s3:GetBucketVersioning", "s3:GetLifecycleConfiguration", "s3:GetBucketPolicy"}
 	withoutReads := slices.DeleteFunc(slices.Clone(granted), func(a string) bool { return slices.Contains(reads, a) })
 	if len(withoutReads) != len(granted)-len(reads) {
 		t.Fatalf("the guide policy lacks some of %v: %v", reads, granted)
@@ -712,7 +727,8 @@ func TestProvisionSESWithGuideSetupPolicy(t *testing.T) {
 			for _, s := range res.Steps {
 				want := ActionUnchanged
 				switch s.Name {
-				case "s3 public access block", "s3 encryption", "s3 versioning", "s3 lifecycle":
+				case "s3 public access block", "s3 encryption", "s3 versioning", "s3 lifecycle",
+					"s3 inbound public access block", "s3 inbound encryption", "s3 inbound lifecycle", "s3 inbound bucket policy":
 					want = tt.secondRun
 					if blind := strings.Contains(s.Detail, "without comparing"); blind != (want == ActionUpdated) {
 						t.Errorf("step %q detail %q", s.Name, s.Detail)

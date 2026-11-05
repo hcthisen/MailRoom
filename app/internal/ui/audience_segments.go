@@ -187,6 +187,8 @@ type audPreviewData struct {
 	P       segments.SegmentPreview
 	Error   string
 	Counted bool
+	// Incomplete: a rule has no value yet; the count waits for it.
+	Incomplete bool
 }
 
 // audPreview evaluates the builder's filter (preview-segment).
@@ -200,6 +202,10 @@ func (u *UI) audPreview(r *http.Request, root *audNode) (audPreviewData, error) 
 	}
 	var ve *core.ValidationError
 	if errors.As(err, &ve) {
+		if strings.Contains(ve.Message, "must not be empty") || strings.HasPrefix(ve.Message, "is required") {
+			// A condition still being filled in is not an error yet.
+			return audPreviewData{Incomplete: true}, nil
+		}
 		return audPreviewData{Error: audHumanError(ve.Field, ve.Message)}, nil
 	}
 	if errors.Is(err, core.ErrValidation) {

@@ -279,6 +279,19 @@ Mailroom knows nothing about GHL. The separate GHL export step (§11) produces f
 
 ---
 
+### 6.16 Receiving email (Inbox)
+
+Mailroom also receives the email sent to the domain, so replies to newsletters and sequences, and any other mail to an address on the domain, land in the admin's Inbox. Receiving is **on by default** and is only left off when the domain already receives email somewhere else.
+
+| ID | Requirement | Prio |
+|---|---|---|
+| N-1 | `provision ses` sets up receiving by default: an S3 bucket `mailroom-inbound-ACCOUNT-REGION` (private, encrypted, `inbound/` expires after 30 days, only SES may write, only for Mailroom's rule), the SES receipt rule set `mailroom` (activated when no other set is active) with the rule `mailroom-inbound` (recipients DOMAIN, spam and virus scan, store in the bucket and notify the event topic), and read/delete access to `inbound/` for the sending user. It writes `INBOUND_BUCKET` and `INBOUND_DOMAIN` to the server `.env`, and the DNS records include `MX DOMAIN 10 inbound-smtp.REGION.amazonaws.com`. `--no-receive` turns it off | P0 |
+| N-2 | Receiving is left off, with a warning and without failing the run, when DOMAIN already has an MX record that points elsewhere (a mailbox provider), another receipt rule set is active in the region, the region doesn't offer SES receiving, or the setup user lacks the inbound bucket permissions. An existing MX record is never changed (L-3) | P0 |
+| N-3 | The SNS webhook accepts SES receipt notifications on the pinned topic and records the message as pending. A worker fetches it from S3, parses it (headers, text, HTML, charsets, attachments up to 25 MB per message), links it to the contact with the sender's address, adds it to that contact's timeline and deletes the S3 copy. Failures are retried with backoff, then the message is marked failed | P0 |
+| N-4 | Inbox in the admin UI and the API: list (inbox, unread, archived, all; search), read (HTML shown sandboxed with remote images blocked until asked for), attachments as downloads, SES spam/virus/SPF/DKIM/DMARC verdicts, mark read/unread, archive, delete. The navigation shows the unread count | P0 |
+| N-5 | Reply from the Inbox: a plain personal email from the settings sender, threaded with In-Reply-To/References and quoting the received text; no layout, unsubscribe link or tracking. Never to a bounced or complained contact or a suppressed address | P0 |
+| N-6 | Received email is personal data: it is part of the contact's GDPR export, deleted by erase, and deleted after 365 days (messages that could not be fetched after 30 days). `doctor` checks the MX record and that received mail is being fetched | P0 |
+
 ## 7. Data model (SQLite)
 
 ```text
@@ -516,4 +529,5 @@ This section lists the decisions that changed during the build. The requirements
 | L-6 | `mailroom restore` leaves all sending paused (resume through the API or UI), and carries opt-outs, suppressions, GDPR erasures, already-sent messages and enrollment progress over from the database it replaces, so a restore never re-emails someone who opted out or sends a message twice. Without a database to replace (a new server) it warns that these are lost |
 | §7 | The data model grew during the build, e.g. `pending_optins`, `form_submissions`, `contact_status_changes`, `opens`, `media`, `version` columns for ETags, and `test` as a message kind. Forms have an integer `id` plus a random `public_id` for their public URLs. `app/internal/db/migrations/` is the source of truth (`0001_init.sql`, plus `0002_autoincrement_ids.sql`, which makes segment, email, broadcast and sequence-step IDs never reused) |
 | I-1 | An import dry run returns its report directly (200). Only the commit runs as a job (202) |
+| N-1..N-6 | Receiving (§6.16) was added after the first build. Received messages and their attachments live in `inbound_messages` and `inbound_attachments` (migration `0005_inbound.sql`, which also rebuilds `messages` for the new kind `reply`). Forwarding received mail to another address was not built: with receiving on, the Inbox is where the domain's mail is read |
 | L-1 | `provision ses` also creates the optional S3 backup bucket (`--no-backup-bucket` skips it) and can rotate the sending key (`--rotate-keys`). The bucket is versioned (overwritten versions of backups expire with them), and the sending user may subscribe only Mailroom's own webhook (`sns:Protocol`/`sns:Endpoint` condition); the doctor warns about any other subscription to the event topic |

@@ -62,7 +62,7 @@ func TestAudienceSegmentBuilder(t *testing.T) {
 		"filter.rules[0].kind": {"condition"}, "filter.rules[0].field": {"status"}, "filter.rules[0].op": {"is"}, "filter.rules[0].value": {"active"},
 		"edit": {"add-group:filter"}}).want(t, http.StatusOK)
 	r.contains(t, `name="filter.rules[1].kind" value="group"`, `name="filter.rules[1].rules[0].field"`, "Group 2",
-		`<option value="active" selected>`, `class="preview-error"`, "Rule 2.1, value: ")
+		`<option value="active" selected>`, "Finish the condition to see who matches.").lacks(t, `class="preview-error"`)
 	// Changing the field picks an operator of the new field.
 	r = c.htmx(http.MethodPost, "/admin/segments/builder", url.Values{
 		"filter.rules[0].kind": {"condition"}, "filter.rules[0].field": {"created_at"}, "filter.rules[0].op": {"has"}}).want(t, http.StatusOK)

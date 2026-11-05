@@ -155,14 +155,28 @@ into the environment the same way.
 
 The command writes the sending user's keys (`AWS_ACCESS_KEY_ID`,
 `AWS_SECRET_ACCESS_KEY`), `AWS_REGION`, `SNS_TOPIC_ARN`,
-`SES_CONFIGURATION_SET` and `BACKUP_BUCKET` (empty with
-`--no-backup-bucket`) into `/opt/mailroom/.env`, which is bind-mounted into
+`SES_CONFIGURATION_SET`, `BACKUP_BUCKET` (empty with
+`--no-backup-bucket`), and `INBOUND_BUCKET` and `INBOUND_DOMAIN` (empty when
+receiving is off) into `/opt/mailroom/.env`, which is bind-mounted into
 the container at that same path, and prints the DNS records. `run` doesn't
 publish any ports, so it also works while the server is running. A running
 server reads `.env` only when its container is created, so afterwards run
 `sudo docker compose up -d` (it recreates the container with the new
 values). `sudo docker compose restart` is not enough: it keeps the old
 environment.
+
+**Receiving email** is set up by default: SES accepts mail for every
+address on `DOMAIN`, stores it in the bucket `mailroom-inbound-ACCOUNT-REGION`
+and notifies the same SNS topic, and Mailroom shows it in its Inbox (where
+replies can be sent). The command leaves receiving off, with a warning in
+`warnings`, when `DOMAIN` already has MX records that point elsewhere (an
+existing mailbox such as Google Workspace or Microsoft 365, which Mailroom
+never replaces), when another SES receipt rule set is active in the region,
+when the region doesn't offer SES receiving, or when the setup key lacks the
+inbound bucket permissions (guide step 2.6). `--no-receive` turns it off on
+purpose. With receiving on, the DNS records include
+`MX DOMAIN 10 inbound-smtp.REGION.amazonaws.com`: from then on all mail to
+the domain goes to Mailroom.
 
 Before it changes anything in AWS, the command checks that it can write
 `.env`. If `.env` doesn't belong to the container user (see step 2), it
@@ -203,6 +217,10 @@ identity with the sending keys it wrote to `.env`, so they need no setup
 keys (Cloudflare needs its token for that run only). Without `--yes`,
 `provision dns` changes nothing; it exits with code 2 when an existing
 record conflicts (it never changes one).
+
+With receiving on (`INBOUND_DOMAIN` in `.env`), both also list the MX
+record of `DOMAIN` that sends its mail to SES receiving. An existing MX
+record is a conflict like any other: it is never changed.
 
 `--ipv4` (and `--ipv6`) add the A (and AAAA) record for `APP_SUBDOMAIN`;
 without them that record is left out, and the HTTPS certificate and checks

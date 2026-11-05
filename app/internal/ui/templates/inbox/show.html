@@ -1,0 +1,102 @@
+{{/* One received email with the reply form. .Data is ui.inboxShowData. */}}
+{{define "actions"}}{{with .Data}}{{$id := printf "/admin/inbox/%d" .M.ID}}
+<a class="btn" href="#reply">Reply</a>
+{{if .M.Read}}{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "%s/flags" $id) "Label" "Mark unread" "Class" " " "Fields" (dict "action" "unread"))}}{{end}}
+{{if .M.Archived}}{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "%s/flags" $id) "Label" "Move to inbox" "Class" " " "Fields" (dict "action" "unarchive"))}}
+{{else}}{{template "post-button" (dict "CSRF" $.CSRF "Action" (printf "%s/flags" $id) "Label" "Archive" "Class" " " "Fields" (dict "action" "archive"))}}{{end}}
+<form method="post" action="{{$id}}/delete" class="inline">{{template "csrf" $}}<input type="hidden" name="version" value="{{.Version}}"><button class="btn btn-ghost" type="submit">Delete…</button></form>
+{{end}}{{end}}
+
+{{define "content"}}{{with .Data}}{{$id := printf "/admin/inbox/%d" .M.ID}}
+{{if and (not .M.Read) (eq .M.Status "received")}}<div hidden hx-post="{{$id}}/flags" hx-vals='{"action": "read"}' hx-trigger="load" hx-swap="none"></div>{{end}}
+{{if eq .M.Status "pending"}}<div class="flash flash-info" role="status"><p>Amazon SES received this email; Mailroom is still fetching it. Reload in a moment.</p></div>{{end}}
+{{if eq .M.Status "failed"}}<div class="flash flash-error" role="alert"><p><strong>This email could not be fetched.</strong> {{.M.FetchError}}</p></div>{{end}}
+{{if .M.Spam}}<div class="flash flash-warning" role="status"><p><strong>Amazon SES flagged this email{{if eq .M.Verdicts.Virus "FAIL"}} for a virus{{else}} as spam{{end}}.</strong> Be careful with its links and attachments.</p></div>{{end}}
+
+<div class="grid grid-2 align-start">
+  <section class="card" aria-labelledby="mail-title">
+    <h2 id="mail-title" class="visually-hidden">Message</h2>
+    <dl class="props">
+      <dt>From</dt><dd>{{with .M.FromName}}<strong>{{.}}</strong> {{end}}&lt;{{.M.FromEmail}}&gt;</dd>
+      {{with .M.ReplyTo}}<dt>Reply-To</dt><dd>{{.}}</dd>{{end}}
+      <dt>To</dt><dd>{{join .M.To ", "}}</dd>
+      {{with .M.Cc}}<dt>Cc</dt><dd>{{join . ", "}}</dd>{{end}}
+      <dt>Received</dt><dd>{{fmtTime .M.ReceivedAt}} <span class="muted small">({{ago .M.ReceivedAt}})</span></dd>
+      {{with .M.InReplyToMessage}}<dt>Answers</dt><dd>one of your emails <span class="muted small">(message {{.}})</span></dd>{{end}}
+    </dl>
+    {{if .M.HTML}}
+      {{if .Display.BlockedImages}}<p class="small muted">{{plural .Display.BlockedImages "remote image was" "remote images were"}} not loaded, so the sender can't see that you opened the email. <a href="{{$id}}?images=1">Show images</a></p>{{end}}
+      <iframe class="preview-frame" title="Email content" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" srcdoc="&lt;style&gt;body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:15px;line-height:1.55;color:#1f2937;margin:14px}&lt;/style&gt;{{.Display.HTML}}"></iframe>
+      <details class="mt-2"><summary class="small">Plain-text version</summary><pre>{{.M.Text}}</pre></details>
+    {{else if .M.Text}}
+      <div class="mail-text mt-2">{{.M.Text}}</div>
+    {{else if eq .M.Status "received"}}
+      <p class="muted">The email has no text.</p>
+    {{end}}
+    {{with .M.AttachmentsList}}
+    <h3 class="mt-3">Attachments</h3>
+    <ul class="plain-list">{{range .}}{{if not .Inline}}
+      <li><a href="{{$id}}/attachments/{{.Position}}">{{.Filename}}</a> <span class="muted small">{{.ContentType}}, {{bytes .SizeBytes}}</span></li>
+    {{end}}{{end}}</ul>
+    <p class="muted small">Attachments come from the sender: open them only if you trust them.</p>
+    {{end}}
+  </section>
+
+  <div class="stack">
+    <section class="card" aria-labelledby="sender-title">
+      <h2 id="sender-title">Sender</h2>
+      {{with .Contact}}
+        <p><a href="/admin/contacts/{{.ID}}"><strong>{{or .Name .Email}}</strong></a> {{badge "contact" .Status}}</p>
+        <p class="muted small">{{.Email}}</p>
+        {{with .Tags}}<p>{{range .}}<span class="tag">{{.}}</span> {{end}}</p>{{end}}
+      {{else}}
+        <p>{{.M.FromEmail}} is not a contact.</p>
+        <a class="btn btn-sm" href="/admin/contacts/new?email={{.M.FromEmail}}">Add as contact</a>
+      {{end}}
+    </section>
+    {{$v := .M.Verdicts}}{{$bad := or (eq $v.Spam "FAIL") (eq $v.Virus "FAIL") (eq $v.SPF "FAIL") (eq $v.DKIM "FAIL") (eq $v.DMARC "FAIL")}}
+    <section class="card{{if $bad}} is-alert{{end}}" aria-labelledby="checks-title">
+      <h2 id="checks-title" class="visually-hidden">Checks by Amazon SES</h2>
+      <details{{if $bad}} open{{end}}><summary>{{if $bad}}<span class="check-pill is-bad">✕ Failed a spam or sender check</span>{{else}}<span class="check-pill is-good">✓ Passed the spam and sender checks</span>{{end}}</summary>
+      <dl class="props mt-3">
+        <dt>Spam</dt><dd>{{template "inbox-verdict" .M.Verdicts.Spam}}</dd>
+        <dt>Virus</dt><dd>{{template "inbox-verdict" .M.Verdicts.Virus}}</dd>
+        <dt>SPF</dt><dd>{{template "inbox-verdict" .M.Verdicts.SPF}}</dd>
+        <dt>DKIM</dt><dd>{{template "inbox-verdict" .M.Verdicts.DKIM}}</dd>
+        <dt>DMARC</dt><dd>{{template "inbox-verdict" .M.Verdicts.DMARC}}</dd>
+      </dl>
+      <p class="muted small">A failed SPF, DKIM or DMARC check means the sender's address may be forged.</p>
+      </details>
+    </section>
+  </div>
+</div>
+
+{{with .M.RepliesSent}}
+<section class="card mt-3" aria-labelledby="replies-title">
+  <h2 id="replies-title">Your replies</h2>
+  {{range .}}
+  <article class="mb-3">
+    <p class="small"><strong>{{.Subject}}</strong> to {{.To}} · {{fmtTime .QueuedAt}} {{badge "message" .Status}}</p>
+    <div class="mail-text reply-bubble">{{.Body}}</div>
+  </article>
+  {{end}}
+</section>
+{{end}}
+
+{{if eq .M.Status "received"}}
+<section class="card mt-3" id="reply" aria-labelledby="reply-title">
+  <h2 id="reply-title">Reply</h2>
+  <form method="post" action="{{$id}}/reply" novalidate>
+    {{template "csrf" $}}
+    {{template "form-error" .ReplyForm}}
+    <p class="small muted">To {{.ReplyTo}}, from your sender address. A plain personal email: no layout, unsubscribe link or tracking.</p>
+    {{template "field" (dict "Form" .ReplyForm "Name" "subject" "Label" "Subject" "Optional" true "Placeholder" (reSubject .M.Subject))}}
+    {{template "textarea-field" (dict "Form" .ReplyForm "Name" "body" "Label" "Message" "Rows" 8 "Required" true)}}
+    {{template "checkbox-field" (dict "Form" .ReplyForm "Name" "quote" "Label" "Quote the received email below my reply")}}
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Send reply</button></div>
+  </form>
+</section>
+{{end}}
+{{end}}{{end}}
+
+{{define "inbox-verdict"}}{{if eq . "PASS"}}{{badge "" "ok"}}{{else if eq . "FAIL"}}{{badge "" "fail"}}{{else if eq . "GRAY"}}{{badge "" "warn"}}{{else if .}}{{badge "" .}}{{else}}<span class="muted">not checked</span>{{end}}{{end}}

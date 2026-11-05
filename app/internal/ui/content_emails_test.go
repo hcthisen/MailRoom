@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"testing"
 
 	"mailroom/internal/core"
@@ -52,7 +51,7 @@ func TestContentEmailLibrary(t *testing.T) {
 	c := hs.session()
 
 	// The nav has the Content section; the empty list says what it is for.
-	c.get("/admin/emails").want(t, http.StatusOK).contains(t, "<h1>Emails</h1>", `aria-current="page">Content`,
+	c.get("/admin/emails").want(t, http.StatusOK).contains(t, "<h1>Emails</h1>", `aria-current="page">Emails`,
 		`aria-label="Content sections"`, `href="/admin/media"`, `href="/admin/layout"`, "No emails yet")
 	c.get("/admin/emails/new").want(t, http.StatusOK).contains(t, "<h1>New email</h1>", `hx-post="/admin/preview/email"`, `name="body"`)
 
@@ -72,7 +71,7 @@ func TestContentEmailLibrary(t *testing.T) {
 		t.Fatalf("%d email.create audit rows", n)
 	}
 	page := c.get(path).want(t, http.StatusOK)
-	page.contains(t, "Email saved.", "<h1>Welcome 1</h1>", "Nothing: no sequence step or broadcast uses this email", `action="/admin/emails/`+strconv.FormatInt(id, 10)+`/test"`)
+	page.contains(t, "Email saved.", "<h1>Welcome 1</h1>", "Nothing: no sequence step or broadcast uses this email", `hx-post="/admin/editor/test"`)
 	ver := page.field(t, "version")
 	contentCreateEmail(t, c, "Other", "Different", "x")
 	c.get("/admin/emails").want(t, http.StatusOK).contains(t, "Welcome 1", "Other", "unused", "Markdown")
@@ -95,10 +94,10 @@ func TestContentEmailLibrary(t *testing.T) {
 	// Test send (send-test-email): to the owner by default, with a
 	// contact's data given by email address.
 	ann := testutil.InsertContact(t, hs.app.DB, "ann@example.org", core.StatusActive)
-	c.post(path+"/test", url.Values{"to": {"not-an-address"}}).want(t, http.StatusUnprocessableEntity).
-		contains(t, `id="f-to-error"`, "is not a valid email address")
-	c.post(path+"/test", url.Values{"contact": {"nobody@example.org"}}).want(t, http.StatusUnprocessableEntity).
-		contains(t, `id="f-contact-error"`, "no contact has the address")
+	c.post(path+"/test", url.Values{"to": {"not-an-address"}}).wantRedirect(t, path)
+	c.get(path).want(t, http.StatusOK).contains(t, "The test was not sent", "is not a valid email address")
+	c.post(path+"/test", url.Values{"contact": {"nobody@example.org"}}).wantRedirect(t, path)
+	c.get(path).want(t, http.StatusOK).contains(t, "no contact has the address")
 	c.post(path+"/test", url.Values{"contact": {"ann@example.org"}}).wantRedirect(t, path)
 	if n := hs.count(`SELECT count(*) FROM messages WHERE kind = 'test' AND email_id = ? AND to_email = 'owner@example.org'
 		AND json_extract(data, '$.contact_id') = ?`, id, ann.ID); n != 1 {

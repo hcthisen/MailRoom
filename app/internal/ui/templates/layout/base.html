@@ -9,7 +9,8 @@ errors). Both get a View. Pages define "content" and optionally
 <title>{{if .Title}}{{.Title}} · {{end}}Mailroom</title>
 <link rel="stylesheet" href="{{static "app.css"}}">
 <script src="{{static "htmx.min.js"}}" defer></script>
-<script src="{{static "app.js"}}" defer></script>{{end}}
+<script src="{{static "app.js"}}" defer></script>
+<script src="{{static "editor.js"}}" defer></script>{{end}}
 
 {{define "layout"}}<!doctype html>
 <html lang="en">
@@ -28,8 +29,9 @@ errors). Both get a View. Pages define "content" and optionally
     </div>
   </header>
   <nav class="sidenav" aria-label="Main">
+    <a class="brand" href="/admin/">Mailroom</a>
     <ul>
-      {{range navItems}}<li><a href="{{.URL}}"{{if eq .Key $.Nav}} aria-current="page"{{end}}>{{.Label}}</a></li>
+      {{range navItems}}<li><a href="{{.URL}}"{{if eq .Key $.Nav}} aria-current="page"{{end}}>{{.Label}}{{template "icon" .Key}}{{with .Count}}<span class="count" title="{{.}} unread">{{.}}<span class="visually-hidden"> unread</span></span>{{end}}</a></li>
       {{end}}
     </ul>
   </nav>

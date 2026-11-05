@@ -126,7 +126,7 @@ _The operator does the email, password, card and phone steps. No screenshots of 
 📸 `02-05d-policy-sns.png`: the search result with **AmazonSNSFullAccess** ticked.
 📸 `02-05e-review.png`: the review page showing both policies.
 
-**2.6 Allow the agent to create the sending user and the backup bucket.** This extra permission lets the agent create the sending user for Mailroom (`mailroom-sender`), give it its permissions and a key, and create the storage bucket for the backups (`mailroom-backup-…`) and check its settings. It applies to that one user and those buckets only.
+**2.6 Allow the agent to create the sending user and the storage buckets.** This extra permission lets the agent create the sending user for Mailroom (`mailroom-sender`), give it its permissions and a key, and create two storage buckets and check their settings: one for the backups (`mailroom-backup-…`) and one where Amazon drops the emails people send to your domain before Mailroom picks them up (`mailroom-inbound-…`). It applies to that one user and those buckets only.
 
 ⚠️ **Treat the `setup-agent` key like a master key.** Because it may set the permissions of `mailroom-sender` and create keys for it, anyone holding the `setup-agent` key could give that user any permission in your AWS account. So keep the key only in your `.env`, never share it, and switch it off as soon as the setup is done (step 7.3). Mailroom itself never stores it: it runs with the `mailroom-sender` key only, and the agent hands the setup key to the server only for single setup commands, in a way that keeps it out of the server's logs.
 1. Open the user `setup-agent` and choose **Permissions → Add permissions → Create inline policy**.
@@ -153,6 +153,16 @@ _The operator does the email, password, card and phone steps. No screenshots of 
                     "s3:GetLifecycleConfiguration", "s3:PutLifecycleConfiguration",
                     "s3:GetBucketVersioning", "s3:PutBucketVersioning"],
          "Resource": "arn:aws:s3:::mailroom-backup-*"
+       },
+       {
+         "Sid": "CreateMailroomInboundBucket",
+         "Effect": "Allow",
+         "Action": ["s3:CreateBucket", "s3:ListBucket",
+                    "s3:GetBucketPublicAccessBlock", "s3:PutBucketPublicAccessBlock",
+                    "s3:GetEncryptionConfiguration", "s3:PutEncryptionConfiguration",
+                    "s3:GetLifecycleConfiguration", "s3:PutLifecycleConfiguration",
+                    "s3:GetBucketPolicy", "s3:PutBucketPolicy"],
+         "Resource": "arn:aws:s3:::mailroom-inbound-*"
        }
      ]
    }

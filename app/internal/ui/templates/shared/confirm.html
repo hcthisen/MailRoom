@@ -2,7 +2,7 @@
 {{define "content"}}{{with .Data}}<section class="card confirm{{if .Danger}} is-danger{{end}}" aria-labelledby="confirm-title">
   <h2 id="confirm-title">Please confirm</h2>
   {{with .Message}}<p>{{.}}</p>{{end}}
-  {{with .Details}}<ul>{{range .}}<li>{{.}}</li>{{end}}</ul>{{end}}
+  {{with .Details}}<ul>{{range .}}{{if hasPrefix . "Warning: "}}<li class="confirm-warn">{{trimPrefix . "Warning: "}}</li>{{else}}<li>{{.}}</li>{{end}}{{end}}</ul>{{end}}
   <form method="post" action="{{.Action}}">
     {{template "csrf" $}}
     {{range $k, $vs := .Fields}}{{range $vs}}<input type="hidden" name="{{$k}}" value="{{.}}">{{end}}{{end}}

@@ -29,6 +29,7 @@ type EraseDeleted struct {
 	StatusChanges   int `json:"status_changes" example:"2"`
 	Enrollments     int `json:"enrollments" example:"1"`
 	PendingOptins   int `json:"pending_optins" example:"0"`
+	InboundMessages int `json:"inbound_messages" doc:"Email received from the contact or its address (the Inbox), with attachments" example:"2"`
 	StoredResponses int `json:"stored_responses" doc:"Stored Idempotency-Key responses (kept up to 24 h) that contained the address; the keys stay recorded, so a retry answers 409" example:"1"`
 }
 
@@ -77,12 +78,16 @@ const (
 	// contain the address (?1 raw, ?2 JSON-escaped). No job type stores
 	// addresses today; this keeps erase complete if one ever does. Queued
 	// and running jobs are left alone so their handlers don't break.
+	// inboundOf selects the email received from the contact or its
+	// address (the Inbox); deleting it deletes its attachments too.
+	inboundOf      = `(contact_id = ?1 OR from_email = ?3)`
 	jobsMentioning = `status IN ('succeeded', 'failed') AND (instr(params, ?1) > 0 OR instr(params, ?2) > 0 OR instr(result, ?1) > 0 OR instr(result, ?2) > 0)`
 )
 
 // Erase deletes a contact and all its personal data (C-6) in one
 // transaction: tags, consent log, status history, enrollments and pending
-// opt-ins go with the contact row. Its messages (its own, those sent to its
+// opt-ins go with the contact row, and so does the email received from it
+// (the Inbox) with its attachments. Its messages (its own, those sent to its
 // address such as test sends, and test sends that used it as the example
 // contact) keep their counts but lose the address, the data, the rendered
 // subject (replaced by the unrendered template subject, which holds merge
@@ -160,6 +165,7 @@ func EraseRows(ctx context.Context, tx *sql.Tx, id int64, email, now string) err
 			WHERE ` + messagesOf, with(erasedError, redactedError, now)},
 		{`INSERT INTO suppressions (email_hash, reason, note, created_at) VALUES (?1, 'erased', '', ?2)
 			ON CONFLICT (email_hash) DO UPDATE SET reason = 'erased', note = ''`, []any{hash, now}},
+		{`DELETE FROM inbound_messages WHERE ` + inboundOf, of},
 		{`DELETE FROM contacts WHERE id = ?1`, []any{id}},
 	}
 	for _, st := range stmts {
@@ -196,6 +202,7 @@ func countErase(ctx context.Context, tx *sql.Tx, id int64, hash, email string, a
 		{&res.Deleted.StatusChanges, `SELECT count(*) FROM contact_status_changes WHERE contact_id = ?1`, byID},
 		{&res.Deleted.Enrollments, `SELECT count(*) FROM enrollments WHERE contact_id = ?1`, byID},
 		{&res.Deleted.PendingOptins, `SELECT count(*) FROM pending_optins WHERE contact_id = ?1`, byID},
+		{&res.Deleted.InboundMessages, `SELECT count(*) FROM inbound_messages WHERE ` + inboundOf, of},
 		{&res.Anonymised.Messages, `SELECT count(*) FROM messages WHERE ` + messagesOf, of},
 		{&res.Anonymised.QueuedSkipped, `SELECT count(*) FROM messages WHERE ` + messagesOf + ` AND status = 'queued'`, of},
 		{&res.Anonymised.Events, `SELECT count(*) FROM events WHERE ` + eventsOf, of},

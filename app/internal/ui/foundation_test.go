@@ -153,8 +153,8 @@ func TestStaticFiles(t *testing.T) {
 	if r.header.Get("Cache-Control") != "public, max-age=31536000, immutable" || !strings.HasPrefix(r.header.Get("Content-Type"), "text/css") {
 		t.Fatalf("headers %v", r.header)
 	}
-	if !strings.Contains(r.body, "prefers-color-scheme: dark") {
-		t.Fatal("app.css has no dark mode")
+	if !strings.Contains(r.body, "color-scheme: light") {
+		t.Fatal("app.css does not declare its light colour scheme")
 	}
 	// Without the current hash: served, but cached briefly.
 	if cc := c.get("/admin/static/htmx.min.js").want(t, http.StatusOK).header.Get("Cache-Control"); cc != "public, max-age=300" {
@@ -184,7 +184,7 @@ func TestStaticLayoutRules(t *testing.T) {
 		// The hidden attribute wins over .btn's display (copy buttons).
 		"[hidden]{display:none!important;}",
 		".table-wrap{position:relative;",
-		"h1{font-size:1.5rem;overflow-wrap:anywhere;}",
+		"h1{font-size:1.625rem;overflow-wrap:anywhere;",
 		".subnav{",
 	} {
 		if !strings.Contains(cssC, rule) {
@@ -245,7 +245,7 @@ func TestPreviewEmail(t *testing.T) {
 	form := url.Values{"subject": {"Hello {{first_name | \"friend\"}}"}, "format": {"markdown"},
 		"body": {"Hi **there** <script>alert(1)</script>"}}
 	r := c.htmx(http.MethodPost, "/admin/preview/email", form).want(t, http.StatusOK).
-		contains(t, `<iframe class="preview-frame"`, `sandbox=""`, "Hello friend", "srcdoc=\"")
+		contains(t, `<iframe class="preview-frame"`, `sandbox="allow-same-origin"`, "Hello friend", "srcdoc=\"").lacks(t, "allow-scripts")
 	// The rendered HTML is escaped into the attribute, never live markup.
 	if strings.Contains(r.body, "<strong>there</strong>") || !strings.Contains(r.body, "&lt;strong&gt;there&lt;/strong&gt;") {
 		t.Fatalf("preview HTML not escaped into srcdoc:\n%s", r.body)
