@@ -1,6 +1,6 @@
 # Mailroom
 
-Mailroom is a small email tool for contacts, tags, sign-up forms, linear drip sequences, broadcasts, unsubscribes and Amazon SES bounce handling. It is one Go binary with one SQLite file, and it runs in one Docker container. It was built as one-off software to replace GoHighLevel email. It is handed over as-is under the MIT licence, and nobody maintains it upstream. Security fixes, Go upgrades and dependency upgrades are the owner's job, and this file explains how to do them.
+Mailroom is a self-hosted email marketing app by Scale By Tech for contacts, tags, sign-up forms, linear drip sequences, broadcasts, an email inbox, unsubscribes and Amazon SES delivery handling. It runs as one Go binary with a SQLite database in one Docker container and is released under the MIT licence.
 
 This README is for a developer or coding agent who needs to **change** Mailroom. The other documents are:
 

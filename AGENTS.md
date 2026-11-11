@@ -3,15 +3,15 @@
 <!-- MAILROOM-SETUP-STATUS: not-started -->
 ## Setup status: NOT DONE (guided setup mode)
 
-The user opens a coding agent in this folder and types something like **"start"**, **"go"** or **"hi"**. Whatever they type first, you lead. You run the **guided setup** below, then the technical runbook (phases 0–11), and at the end you switch this file to operations mode (§ "Finishing the setup"). The user does not need to read any guide: you tell them, one small step at a time, what to do.
+When the user asks to set up Mailroom, or opens with **"start"**, **"go"** or **"hi"**, lead them through the **guided setup** below, then the applicable technical runbook phases (0–11). At the end, switch this file to operations mode (§ "Finishing the setup"). For a specific development or documentation request, complete that request without starting setup. The user does not need to read any guide: you tell them, one small step at a time, what to do.
 
 ### Guided setup
 
 1. **Welcome.** Reply in the user's language. In a few sentences, say what happens:
-   - you'll move their email (contacts, newsletters, drip emails) from GoHighLevel to their own system, Mailroom with Amazon SES;
+   - you'll set up Mailroom with Amazon SES for contacts, newsletters, sign-up forms, and drip sequences; importing existing GoHighLevel data is optional;
    - they create a few accounts and keys, and you do the technical work;
    - it takes about 1–2 hours of their time over a couple of days, mostly waiting for AWS and DNS;
-   - you'll ask for their "yes" before anything important (five checkpoints).
+   - you'll ask for their "yes" at the applicable checkpoints before importing data, changing DNS, requesting SES production access, or enabling live sending.
 
    If `PROGRESS.md` exists, a previous session was interrupted: say so, read it, and continue where it stopped.
 2. **The settings file.** If `.env` doesn't exist, copy `.env.example` to `.env`. Never overwrite an existing `.env`. Create `secrets/`. Then open `.env` for the user in the system's simple text editor, so they can see it and paste keys into it:
@@ -21,15 +21,15 @@ The user opens a coding agent in this folder and types something like **"start"*
 
    Tell the user: keep this window open, paste each key on its line right after the `=`, and save (Ctrl+S / Cmd+S) after each change. Don't type quotes; you add those yourself where needed.
 3. **Walk through the accounts, one step at a time,** following [guide/steps.md](guide/steps.md) Parts 1–5. That file is your script: for each step, tell the user in plain words what to click (with the link), wait until they say it's done, then check the result before the next step.
-   - **Order:** GoHighLevel first (Part 1), because its data is deleted on `GHL_SHUTDOWN_DATE`. As soon as the GHL token works, run phase 1 (the export) before continuing.
+   - **Starting point:** ask whether this is a fresh installation or an import from GoHighLevel. Record the choice in `PROGRESS.md`. For a GHL import, follow Part 1 and run phase 1 once the token works. For a fresh installation, skip Part 1, GHL credentials and checks, phase 1 and CHECKPOINT 1; start with Part 2. Skip any other migration-only steps that do not apply.
    - **Skip what doesn't apply.** Ask early: do they already have a Coolify server (`DEPLOY_TARGET=coolify`) or should you create a Hetzner server (`vps`)? Is their domain on Cloudflare (`DNS_MODE=cloudflare`) or elsewhere (`manual`)?
-   - **Values that aren't secret** (domain, company name and address, sender name and addresses, timezone, shutdown date, the choices above): ask in the chat and write them into `.env` yourself. Quote values that contain spaces (`FROM_NAME="Their Company"`).
+   - **Values that aren't secret** (domain, company name and address, sender name and addresses, timezone, the choices above): ask in the chat and write them into `.env` yourself. Quote values that contain spaces (`FROM_NAME="Their Company"`).
    - **Secrets** (GHL token, AWS keys, Hetzner, Cloudflare and Coolify tokens): never ask for them in the chat, because the chat is saved. Tell the user to paste them into the open `.env` and save. If they paste one into the chat anyway, don't repeat it. Write it into `.env`, and tell them to create a new key at the end of the setup and delete that one.
    - **Check each value without showing it:** read `.env`, check that it's filled in and has the right shape, and where possible make the read-only call from phase 0 (e.g. the GHL location, `aws sts get-caller-identity`). If a check fails, say which value and what to look at, but never print the value.
    - **Steps the user must do themselves:** creating accounts, passwords, payment, phone or ID checks, and two-factor setup. Explain where to click, then wait.
    - **Files for the user (Part 1.5/1.6):** create `ghl-export/workflows/<name>/` with a `workflow.md` copied from `_template.md`, and open the files they have to fill in (`workflow.md`, `_overview.md`) in the simple text editor, like `.env`. They can also describe a workflow in the chat while you write the file.
    - Write each finished step to `PROGRESS.md`, so a new session can continue.
-4. When Parts 1–5 are done and phase 0 passes, tell the user that you now do the technical work and will stop at the checkpoints. Then run phases 1–11 below.
+4. When the applicable steps in Parts 1–5 are done and phase 0 passes, tell the user that you now do the technical work and will stop at the applicable checkpoints. Then run the applicable phases below.
 
 ### Finishing the setup
 
@@ -73,7 +73,7 @@ The setup finished on «date». **Don't run the guided setup or phases 1–11 ag
 
    If they ask, follow the matching part of the runbook or `deploy/` and confirm before each step.
 4. Never print secrets (tokens, keys, passwords) in the chat. They stay in `.env`, `secrets/` and the server.
-5. GoHighLevel is closed; the original data is in `ghl-export/`. Don't use the GHL token.
+5. If data was imported from GoHighLevel, the original export is in `ghl-export/`. Use the GHL token only when the user explicitly requests another read-only export.
 6. Never send to the user's contacts just to test. Send tests to the owner's address with the test-send operations.
 ````
 
@@ -81,7 +81,7 @@ The setup finished on «date». **Don't run the guided setup or phases 1–11 ag
 
 # Technical runbook (reference)
 
-You are the coding agent for a customer who is leaving GoHighLevel (GHL). Once the guided setup above has filled in `.env`, your job is to export their GHL data, install Mailroom, migrate, test and hand over. The customer is not necessarily technical, so explain briefly and concretely what you are doing and what you need.
+You are the coding agent helping a user install and configure Mailroom. Once the guided setup above has filled in `.env`, deploy Mailroom, configure email delivery, test it, and document how to operate it. Import existing GoHighLevel (GHL) data only when the user chooses that option. The customer is not necessarily technical, so explain briefly and concretely what you are doing and what you need.
 
 **Mailroom** is the single app in [app/](app/). It handles contacts, tags, forms, drip sequences, broadcasts, unsubscribes and SES bounce handling. Read [app/PRD.md](app/PRD.md) for what it does. For how to use it:
 - the API spec: [app/api/openapi.yaml](app/api/openapi.yaml) (a snapshot; the running server serves the same spec at `/api/v1/openapi.json`),
@@ -136,9 +136,9 @@ Website form ─► Mailroom (one container, SQLite, HTTPS) ─► Amazon SES �
   - `curl`, and `jq` if you want it for the API recipes (optional).
 
   If a CLI can't be installed, call the same services' HTTP APIs with `curl` instead.
-- Read `.env`, and check that the required fields are filled in. With `DEPLOY_TARGET=vps` (or empty), either `HCLOUD_TOKEN` or `VPS_HOST` must be set. With `DEPLOY_TARGET=coolify`, either `COOLIFY_URL` + `COOLIFY_API_TOKEN` are set (you deploy through Coolify's API) or the customer will click through Coolify themselves (deploy/coolify.md §4 "By hand"); you also need Go 1.26+ on this machine for the SES and DNS commands (deploy/coolify.md §1). With `DNS_MODE=cloudflare`, `CLOUDFLARE_API_TOKEN` must be set.
+- Read `.env`, and check that the required fields are filled in. With `DEPLOY_TARGET=vps` (or empty), either `HCLOUD_TOKEN` or `VPS_HOST` must be set. GHL fields are required only for a GHL import. With `DEPLOY_TARGET=coolify`, either `COOLIFY_URL` + `COOLIFY_API_TOKEN` are set (you deploy through Coolify's API) or the customer will click through Coolify themselves (deploy/coolify.md §4 "By hand"); you also need Go 1.26+ on this machine for the SES and DNS commands (deploy/coolify.md §1). With `DNS_MODE=cloudflare`, `CLOUDFLARE_API_TOKEN` must be set.
 - Validate each key with one read-only call:
-  - GHL: fetch the location (`GET /locations/{GHL_LOCATION_ID}`).
+  - GHL (only for a GHL import): fetch the location (`GET /locations/{GHL_LOCATION_ID}`).
   - AWS (setup keys, `AWS_REGION`): `aws sts get-caller-identity` and `aws sesv2 get-account`. Note whether `ProductionAccessEnabled` is false (sandbox).
   - Hetzner (vps): list servers (`hcloud server list`).
   - Coolify: `GET $COOLIFY_URL/api/v1/version` and `GET $COOLIFY_URL/api/v1/servers` with `Authorization: Bearer $COOLIFY_API_TOKEN`; note the server's public IP and that its proxy is running. Check that Coolify can read this repository (a GitHub App or deploy key, deploy/coolify.md §1).
@@ -147,12 +147,11 @@ Website form ─► Mailroom (one container, SQLite, HTTPS) ─► Amazon SES �
 - Check that `APP_SUBDOMAIN.DOMAIN` and `MAIL_FROM_SUBDOMAIN.DOMAIN` (defaults `newsletter` and `bounce`) don't already exist in DNS. If one does, ask for another name. Also note whether `_dmarc.DOMAIN` has a TXT record (phase 4).
 - Check whether `OWNER_EMAIL` is on `DOMAIN` (ground rule 4).
 - Note whether `DOMAIN` has MX records, and where they point. Mailroom receives the domain's email by default (its Inbox, phase 3), but only when `DOMAIN` has no MX record yet: an existing mailbox (Google Workspace, Microsoft 365, the web host's mail) is never replaced, and `provision ses` then leaves receiving off. Tell the customer which case applies.
-- Check that `GHL_SHUTDOWN_DATE` is in the future. If fewer than 7 days remain, say so clearly. Phase 1 is then the only thing that is urgent.
 - Report to the customer: what works, what is missing, and the plan.
 
-## Phase 1: Export from GHL (separate step, highest priority)
+## Phase 1: Optional GoHighLevel export
 
-This step has nothing to do with Mailroom. It only produces files. Use GHL API v2 (`https://services.leadconnectorhq.com`) with `Authorization: Bearer $GHL_TOKEN` and the `Version` header specified in GHL's documentation.
+Run this phase only when the user chooses a GHL import. It produces files for the import. Use GHL API v2 (`https://services.leadconnectorhq.com`) with `Authorization: Bearer $GHL_TOKEN` and the `Version` header specified in GHL's documentation.
 
 1. Fetch with pagination and save raw JSON in `ghl-export/raw/`:
    - all contacts with all fields, incl. `tags`, `dnd`, `dndSettings`, `customFields`, `source`, `dateAdded`,
@@ -175,7 +174,7 @@ This step has nothing to do with Mailroom. It only produces files. Use GHL API v
 
 ## Phase 2: Server
 
-> **`DEPLOY_TARGET=coolify`:** skip phases 2–5 as written here and follow [deploy/coolify.md](deploy/coolify.md) steps 2–6 instead. The checkpoints still apply: ⛔ 2 before sending the production-access request, ⛔ 3 before any DNS change. The admin and the API token come from `MAILROOM_ADMIN_EMAIL`/`MAILROOM_ADMIN_PASSWORD`/`MAILROOM_BOOTSTRAP_TOKEN` (the token is in `secrets/api-token.txt`, the password in `secrets/admin-password.txt`). Then continue at phase 6.
+> **`DEPLOY_TARGET=coolify`:** skip phases 2–5 as written here and follow [deploy/coolify.md](deploy/coolify.md) steps 2–6 instead. The applicable checkpoints still apply: ⛔ 2 before sending the production-access request, ⛔ 3 before any DNS change. The admin and the API token come from `MAILROOM_ADMIN_EMAIL`/`MAILROOM_ADMIN_PASSWORD`/`MAILROOM_BOOTSTRAP_TOKEN` (the token is in `secrets/api-token.txt`, the password in `secrets/admin-password.txt`). Then continue at phase 6.
 
 - **Hetzner** (`hcloud` CLI with `HCLOUD_TOKEN`):
   - Create an SSH key in `secrets/` and upload the public part.
@@ -214,8 +213,8 @@ Follow [deploy/README.md](deploy/README.md) for the exact commands. Run every `d
    - If it stops before changing anything because it can't write `.env`, fix the owner as in deploy/README.md §2 and run it again.
    - It is safe to run again. If it says the sending user already has a key that is not in `.env`, run it again with `--rotate-keys`.
 5. If `production_access_enabled` is false (the SES sandbox), draft the production access text in `secrets/ses-use-case.txt` (200 to 5,000 characters):
-   - that contacts opted in with documented consent (from the GHL export),
-   - the number of contacts and expected volume,
+   - how contacts opt in and how consent is recorded; for migrated contacts, use the export as evidence, and for a fresh installation, describe the planned sign-up process without claiming an existing list,
+   - the current or planned number of contacts and expected volume, confirmed with the user,
    - automatic bounce and complaint handling,
    - one-click unsubscribe,
    - that unsubscribed and bounced contacts are suppressed.
@@ -257,6 +256,8 @@ Afterwards run `sudo docker compose run --rm mailroom doctor --json` until the D
 
 ## Phase 7: Import contacts
 
+If the user has no contact file to import, skip this phase and CHECKPOINT 4. For a GHL import, use `ghl-export/contacts.csv`; for another source, prepare a CSV in Mailroom's import format and use that file below.
+
 1. `POST /api/v1/imports?dry_run=true` with `ghl-export/contacts.csv` (multipart field `file`). The dry run writes nothing and answers `200` with the `report` right away; there is no job to poll. Show the report: counts per status and tag, merged duplicates, and rejected rows with the line number and reason.
 
 ⛔ **CHECKPOINT 4:** Approve the import.
@@ -266,6 +267,8 @@ Afterwards run `sudo docker compose run --rm mailroom doctor --json` until the D
 ## Phase 8: Sequences
 
 Nothing in this phase may email a real contact (ground rule 4): real contacts are enrolled only after CHECKPOINT 5.
+
+For a fresh installation, ask whether the user wants any sequences. Create only the sequences they request, using their content, delays and triggers, and test them as below. If none are requested, skip this phase. Workflow conversion and mid-flow enrolments apply only to a migration.
 
 1. For each flow in `ghl-export/workflows/`, write a sequence file in Mailroom's format ([app/docs/sequence-format.md](app/docs/sequence-format.md)):
    - `status: paused`: a paused sequence sends nothing, and tag triggers don't enrol into it,
@@ -284,6 +287,8 @@ Nothing in this phase may email a real contact (ground rule 4): real contacts ar
 4. Contacts mid-flow: prepare the enrolment, but **don't run it yet**. Follow the customer's choice in each `workflow.md`. For "continue", calculate the step from `consent_date` and the delays. `consent_date` is GHL's `dateAdded`, only a stand-in for when the contact entered the workflow, so say so in the plan. Mailroom accepts a `start_at` in the past, which makes the step due at once: when the computed due time is in the past, set `start_at` so the step falls due no earlier than the day after go-live, and spread a large cohort over several days rather than sending it all at once. Run only the dry run now, `POST /api/v1/sequences/{id}/enrollments?dry_run=true` with `emails`, `at_step`, `start_at` and `source: "migration"`, and keep the plan (per sequence: `would_enroll`, `skipped`, and each group's step and `start_at`) for CHECKPOINT 5.
 
 ## Phase 9: Forms
+
+For a fresh installation, ask which forms the user wants and create those using the steps below. If none are requested, skip this phase. Use `_overview.md` only for a GHL import.
 
 1. For each form in `_overview.md`, create a Mailroom form with `POST /api/v1/forms`: `name`, `fields`, `tags`, `sequence_id`, `consent_text`, `redirect_url` and, if the website posts with JavaScript, `allowed_origins`. Double opt-in (`double_optin`) stays **off** unless the customer asks for it.
 2. Get the embed code with `GET /api/v1/forms/{id}/snippet`. It also returns the hosted form URL (`hosted_url`, `https://APP_SUBDOMAIN.DOMAIN/f/PUBLIC_ID`).
@@ -336,6 +341,6 @@ Nothing in this phase may email a real contact (ground rule 4): real contacts ar
    - delete the Cloudflare token,
    - delete the Hetzner token. The server keeps running.
    - Coolify: delete the API token you used (`COOLIFY_API_TOKEN`), unless they want to keep it.
-   - The GHL token dies with the account.
-5. List the GHL-related DNS records (e.g. LeadConnector/Mailgun DKIM, tracking CNAMEs, GHL entries in SPF) that can be deleted **after** `GHL_SHUTDOWN_DATE`. Don't delete them yourself.
+   - If a GHL export was used, revoke its read-only integration token when no further exports are needed.
+5. If the user migrated from another service and asks to remove its DNS records, first check which services still use them. Show the proposed changes and get explicit approval before deleting any record.
 6. Update `PROGRESS.md` to "done", give a short summary, and switch this file to operations mode (§ "Finishing the setup" at the top).

@@ -57,6 +57,6 @@ After the operator has finished, take the screenshot the step asks for (if any).
 ## What not to capture
 
 - Anything from Part 6 beyond the terminal screenshots (the agent's run happens on the client's machine).
-  Exception: `04b-02-record-table.png`, `06-04-checkpoint-example.png` and `07-01-mailroom-login.png` are taken during {{AGENCY}}'s own pilot install, once Mailroom exists.
+  Exception: `04b-02-record-table.png`, `06-04-checkpoint-example.png` and `07-01-mailroom-login.png` are taken during a demo Mailroom installation, once Mailroom exists.
 - Billing pages, card forms, personal data screens.
 - Real client sub-accounts.

@@ -1,44 +1,41 @@
-# PRD: Mailroom, a single-app email tool to replace GoHighLevel email
-
-_Mailroom is a working name._
+# PRD: Mailroom email marketing
 
 | | |
 |---|---|
 | **Status** | Draft v0.3 |
-| **Owner** | {{AGENCY}} |
+| **Owner** | Scale By Tech |
 | **Date** | 2026-09-29 |
-| **Replaces** | listmonk + n8n in the GHL exit kit |
-| **Nature** | One-off transition software, handed over as-is. Not a maintained product or SaaS |
+| **Deployment** | Self-hosted app with a web interface and REST API |
 | **Licence** | MIT (open source) |
 
 ---
 
 ## 1. Summary
 
-Clients leaving GoHighLevel (GHL) use it for two email jobs:
+Mailroom supports two main email marketing workflows:
 1. **Drip sequences** triggered by sign-ups, e.g. "joined the free community → 5 emails over 7 days".
 2. **Broadcasts** to the whole list or a segment, a handful of times a year.
 
-The current kit plan uses two platforms for this. listmonk handles contacts and broadcasts, and n8n handles triggers and drips. n8n is a general automation platform, far more than a signup webhook and a timer need. It is also a second system to deploy, secure, back up and explain.
+Contacts, broadcasts, form triggers, and drip scheduling run together in one application.
 
 **Mailroom** is one small app that does exactly these jobs and nothing else:
 - Go, one binary, one Docker container.
 - One SQLite file.
 - Sends through Amazon SES.
 - **100 % API-enabled:** everything can be read and changed through a REST API, so an AI agent can operate and update the whole app.
-- Built to be installed and operated by a coding agent (Claude Code or Codex) from the kit folder, with a simple web UI for the client.
+- Can be installed and operated by a coding agent (Claude Code or Codex), with a web UI for day-to-day use.
 
-Mailroom is **one-off software**. {{AGENCY}} builds it once so clients have a viable option when GHL closes, and hands it over as-is with its source code under the MIT licence. {{AGENCY}} does not maintain, update or support it afterwards. Each client owns their install, and can use their own coding agent to change or update it.
+Mailroom is developed by Scale By Tech and distributed with its source code under the MIT licence. Users host their own installation and can configure it through the web interface or REST API.
 
 ## 2. Goals
 
 1. **One platform.** One container, one database file, one admin UI, one backup.
-2. **Covers what clients use GHL email for:** contacts, tags, sign-up forms, linear drip sequences, broadcasts, unsubscribe, bounce handling, basic stats.
+2. **Email marketing workflows:** contacts, tags, sign-up forms, linear drip sequences, broadcasts, unsubscribe, bounce handling, basic stats.
 3. **Safe by default.** Suppressed contacts can never be emailed by any path. Every marketing email has one-click unsubscribe. A bad list can't burn the client's SES account (circuit breaker).
 4. **100 % API-enabled.** Every record, setting and action in the app can be read and changed through the REST API. Nothing is UI-only. An AI agent can run and change the whole app without opening the UI.
 5. **Small and cheap.** Runs comfortably on the smallest Hetzner VPS. Cost is the VPS plus SES at about $0.10 per 1,000 emails.
 6. **Easy to load migrated data:** a documented CSV import format that carries consent data and unsubscribed/bounced status, and a YAML format for sequences.
-7. **Self-contained handover.** The source, pinned dependencies and build instructions are all in the kit. Nothing depends on {{AGENCY}} infrastructure (no registry, update feed or licence server) after handover.
+7. **Self-hosted deployment.** The repository includes the source, pinned dependencies, and build instructions. Each installation runs on the user's infrastructure.
 
 ## 3. Non-goals
 
@@ -59,7 +56,7 @@ Mailroom is **one-off software**. {{AGENCY}} builds it once so clients have a vi
 |---|---|
 | **Client owner** (non-technical) | Send a newsletter, see who signed up, change the text or delay of a drip email, export or delete a contact on request |
 | **Client's coding agent** | Install and provision via a few CLI commands, then configure, import, verify and change everything through the REST API. Needs a complete OpenAPI spec, predictable errors, dry runs and a `doctor` check |
-| **{{AGENCY}} (builder)** | Build it once, test it on its own account, and hand it over in the kit. No obligations after that |
+| **Developer** | Build, test, deploy, and extend the application |
 
 **Scale target per install:** up to 50,000 contacts, 200,000 emails/month, 10 sequences, 5 forms.
 
@@ -393,7 +390,7 @@ listmonk is AGPL-3.0 and Mailroom is MIT, so **no listmonk code may be copied**.
 
 **Footprint targets:** image under ~60 MB (changed during the build, see Build notes), idle RAM under 80 MB, under 200 MB while sending.
 
-**Distribution:** the source ships in the kit (`app/`), with Go dependencies vendored and a multi-stage Dockerfile. The client's agent builds the image on the server. No container registry, and no dependency on {{AGENCY}} after handover.
+**Distribution:** the source is included in `app/`, with vendored Go dependencies and a multi-stage Dockerfile. Build the image from source on your server or through Coolify.
 
 ---
 
@@ -414,7 +411,7 @@ crm-marketing/          (the repository root; start the coding agent here)
 
 **What the client's coding agent does** (see AGENTS.md)
 1. Preflight.
-2. The GHL export step (separate).
+2. Optional GHL export for users importing existing contacts and workflows.
 3. Create the Hetzner server and install Docker.
 4. Build Mailroom on the server, and run `mailroom provision ses`.
 5. DNS: `mailroom provision dns --cloudflare`, or hand the client the table from `mailroom dns records`.
@@ -457,7 +454,7 @@ The sending user `mailroom-sender` gets only:
 | **M1: Core** | API foundation (OpenAPI spec, tokens, errors, idempotency, ETags, jobs, audit), contacts, tags, suppression, SES sending, messages, SNS webhook, unsubscribe, base layout, CLI (`provision`, `doctor`, bootstrap), backups | A test email passes DKIM/SPF/DMARC, and bounce and complaint via the simulator suppress the contact |
 | **M2: Drips + forms** | Forms, double opt-in, sequences, scheduler, sequence YAML import/export, enrol-at-step, all via API | The community drip (5 emails / 7 days) runs end-to-end with shortened delays and exits on the `customer` tag |
 | **M3: Broadcasts + UI** | Segments, broadcasts, throttling, circuit breaker, stats, per-contact click tracking, full admin UI, UI/API parity test, `app/docs/api.md` | A 5k broadcast to the simulator, with pause/resume and a restart mid-send, has no duplicates |
-| **M4: Kit** | `deploy/docker-compose.yml`, import and sequence format docs, `app/README.md`, final pass on AGENTS.md and the guide | {{AGENCY}}'s own account is migrated with the kit, followed by one pilot client. Then the kit is frozen and handed over |
+| **M4: Deployment and documentation** | `deploy/docker-compose.yml`, import and sequence format docs, `app/README.md`, AGENTS.md, and the setup guide | Fresh installation and optional contact import are verified with the documented setup |
 
 ---
 
@@ -465,7 +462,7 @@ The sending user `mailroom-sender` gets only:
 
 | Risk | Mitigation |
 |---|---|
-| **No one maintains it after handover.** Security fixes, Go and base-image updates, and any SES API changes are the client's own job | Say so clearly in the README. Keep the code small with few, vendored dependencies. `app/README.md` explains how a coding agent updates Go, dependencies and the base image. The SES v2 API is stable |
+| Dependencies and base images become outdated | Keep dependencies vendored and document Go, dependency, and base-image updates in `app/README.md` |
 | Clients' deliverability suffers from an old GHL list | Clean the list at import, circuit breaker, staged first send (guide) |
 | A bug emails unsubscribed people (legal exposure) | One send path, a final suppression check before the SES call, and tests for every suppression case |
 | SQLite corruption or a lost disk | WAL mode, nightly `VACUUM INTO` + S3, Hetzner backups, tested restore |
@@ -473,7 +470,7 @@ The sending user `mailroom-sender` gets only:
 
 ## 15. Decisions made
 
-- One-off software, handed over as-is. No maintenance, updates or support from {{AGENCY}}.
+- Self-hosted email marketing app with source code included.
 - Licence: **MIT** (open source). Because of this, no listmonk (AGPL) code is copied.
 - The GHL export is a separate step and not part of Mailroom.
 - English UI only.
@@ -521,7 +518,7 @@ This section lists the decisions that changed during the build. The requirements
 | G-10 | Outbound webhooks (P2): not built |
 | §6.12, G-1 | Messages, events and clicks each have list and get (`get-event`, `get-click`). Two rows of the coverage table are narrower on purpose: enrolment is bulk (`enroll-sequence-contacts`, with `dry_run`), but unenrolment is one enrollment at a time (`unenroll-sequence-contact`); and API tokens are created, read and revoked but never updated (revoke and create a new one: a token's scope and expiry never change under its holder) |
 | §12 Testability | The real smoke test against the SES mailbox simulator (and M1's "bounce and complaint via the simulator suppress the contact") is a documented manual procedure, not a script: it needs live AWS credentials and a public HTTPS endpoint for SNS. AGENTS.md phases 8 and 10 run it (sends to `success@`, `bounce@` and `complaint@simulator.amazonses.com`, then check the contacts become `bounced` and `complained`). The automated tests cover the same flow with a fake provider and signed SNS notifications (`internal/app`) |
-| §11 guide | `guide/steps.md` has the text of every step and marks each screenshot (📸) to take; the screenshots themselves are not captured yet. `guide/CAPTURE.md` is the brief for capturing them, and the kit README says so |
+| §11 guide | `guide/steps.md` has the text of every step and marks each screenshot (📸) to take; the screenshots themselves are not captured yet. `guide/CAPTURE.md` is the brief for capturing them, as described in `guide/CAPTURE.md` |
 | B-10 | Web archive (P2): built at `/archive/{id}`, only for broadcasts to everyone, with no personal data or tracking |
 | F-5 | The optional disposable-domain list was not built. The honeypot, per-IP rate limit and syntax check were |
 | §12 Security | Rate limits: every public endpoint is limited per client address except the unsubscribe POST (mail providers send one-click unsubscribes from shared addresses, and none may be refused) and the SNS webhook (a 429 would drop SES events); both check an HMAC token or the SNS signature first (ARCHITECTURE.md §7). Restricting the admin UI to IP ranges was not built: use the server firewall or a reverse proxy. The kit has no CI. The spec check and the parity test are part of the test suite, and govulncheck is run by hand (`app/README.md`) |

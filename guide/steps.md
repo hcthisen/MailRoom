@@ -1,39 +1,39 @@
-# Step-by-step: moving your email out of GoHighLevel
+# Setting up Mailroom
 
-This file is the source for the client guide. Each step says what to do in plain words.
+This guide walks through setting up Mailroom, Amazon SES, hosting, and DNS. Importing existing contacts and workflows from GoHighLevel is optional. Each step says what to do in plain words.
 
 - 📸 marks a screenshot the capture agent must take (file name, what must be visible, what to highlight, what to blur).
 - ➡️ `.env` marks a value that goes into the settings file.
 
-**You don't have to follow this file yourself.** Start the coding agent in the `crm-marketing` folder and type `start` (Part 0). The agent walks you through Parts 1–5 one step at a time, using this file as its script, then does the technical work (Part 6) and tells you what to finish (Part 7). The steps take about 1–2 hours of your time, plus waiting for account approvals. This file is the reference for those steps and the source for the screenshot guide.
+**You don't have to follow this file yourself.** Start the coding agent in the `MailRoom` folder and type `start` (Part 0). The agent walks you through the applicable steps in Parts 1–5 one step at a time, using this file as its script, then does the technical work (Part 6) and tells you what to finish (Part 7). The steps take about 1–2 hours of your time, plus waiting for account approvals. This file is the reference for those steps and the source for the screenshot guide.
 
 ---
 
 ## Part 0: Get ready
 
-**0.1 Download the kit.** Download (or clone) the `crm-marketing` repository and put the folder somewhere you can find it, e.g. your Documents folder.
+**0.1 Download Mailroom.** Download (or clone) the `MailRoom` repository and put the folder somewhere you can find it, e.g. your Documents folder.
 📸 `00-01-kit-folder.png`: the folder open in Finder/Explorer.
 
 **0.2 Install the coding agent.** Install **Claude Code** (<https://claude.com/claude-code>) or **Codex** (<https://openai.com/codex>) by following their install page.
 > The agent may ask to install a few command-line tools it needs, such as the AWS CLI, the Hetzner CLI (`hcloud`) and `jq`. On a work laptop managed by your IT department, installing may need administrator rights: check beforehand that you have them, or ask IT.
 
-**0.3 Start the agent in the folder.** Open a terminal in the `crm-marketing` folder:
+**0.3 Start the agent in the folder.** Open a terminal in the `MailRoom` folder:
 - **Windows:** in Explorer, open the folder, click the address bar, type `cmd` (or `powershell`) and press Enter.
 - **Mac:** right-click the folder in Finder and choose **New Terminal at Folder**. If you don't see it, turn it on under **System Settings → Keyboard → Keyboard Shortcuts → Services**.
 
 Then type `claude` (or `codex`) and press Enter. The first time, you'll be asked to log in.
 📸 `00-03-terminal.png`: the terminal in the folder with the agent started.
 
-**0.4 Type `start`.** The agent takes it from here. It creates your settings file (`.env`), opens it in Notepad (Windows) or TextEdit (Mac), and guides you through Parts 1–5 one step at a time. Paste keys into that file, never into the chat: the chat is saved. You only type into the chat what the agent asks for, such as your company name.
+**0.4 Type `start`.** The agent takes it from here. It creates your settings file (`.env`), opens it in Notepad (Windows) or TextEdit (Mac), and guides you through the applicable steps in Parts 1–5 one step at a time. Paste keys into that file, never into the chat: the chat is saved. You only type into the chat what the agent asks for, such as your company name.
 📸 `00-04-agent-welcome.png`: the agent's welcome message and the opened `.env`.
 
 **0.5 Get a password manager ready.** Use 1Password, Bitwarden or your browser's password manager. Every password and key you create goes there.
 
 ---
 
-## Part 1: GoHighLevel (do this first)
+## Part 1: Optional GoHighLevel import
 
-> Your GoHighLevel sub-account is deleted on **{{SHUTDOWN_DATE}}**, and so is everything in it. Do this part now.
+The agent asks whether you want a fresh installation or to import existing GoHighLevel contacts and workflows. For a fresh installation, skip this part and continue with Part 2.
 
 **1.1 Log in to your sub-account.** Go to <https://app.gohighlevel.com> and open **your business**, not the agency view.
 📸 `01-01-subaccount-dashboard.png`: the sub-account dashboard. Highlight the business name at the top left.
@@ -70,7 +70,7 @@ Then type `claude` (or `codex`) and press Enter. The first time, you'll be asked
 📸 `01-04c-scopes.png`: the permissions list with the ticked ones highlighted. If the list needs scrolling, take several screenshots (`-c1`, `-c2`).
 📸 `01-04d-token-shown.png`: the token screen with the copy button highlighted. Blur the token.
 ➡️ `.env`: `GHL_TOKEN=`
-> Can't see "Private Integrations"? Your user needs to be an admin of the sub-account. Contact {{AGENCY}} before {{SHUTDOWN_DATE}}.
+> Can't see "Private Integrations"? Your user needs to be an admin of the sub-account. Ask your GoHighLevel account administrator to grant access.
 
 **1.5 Document each email workflow.** Workflows can't be exported, so you capture them yourself. The agent creates the folders and files for you and opens them in Notepad/TextEdit. For each workflow that sends emails:
 1. Go to **Automation → Workflows** and open the workflow.
@@ -270,7 +270,6 @@ Log in to your DNS provider, find **DNS** / **DNS records** for your domain, and
 - `TIMEZONE`: e.g. `Europe/Copenhagen`
 - `APP_SUBDOMAIN`: the web address for Mailroom. The default `newsletter` gives `newsletter.yourdomain.com`
 - `MAIL_FROM_SUBDOMAIN`: leave it as `bounce` unless `bounce.yourdomain.com` is already in use. Mail servers send their bounce reports there
-- `GHL_SHUTDOWN_DATE`: {{SHUTDOWN_DATE}}
 
 Save the file (**Ctrl+S** / **Cmd+S**).
 📸 `05-01-env-complete.png`: the finished `.env` with all values blurred and the field names visible.
@@ -279,13 +278,13 @@ Save the file (**Ctrl+S** / **Cmd+S**).
 
 ## Part 6: Let the agent do the work
 
-When Parts 1–5 are done, the agent continues by itself in the same session. If you closed it, start it again in the folder (0.3) and type `start`: it reads its notes (`PROGRESS.md`) and continues where it stopped.
+When the applicable steps in Parts 1–5 are done, the agent continues by itself in the same session. If you closed it, start it again in the folder (0.3) and type `start`: it reads its notes (`PROGRESS.md`) and continues where it stopped.
 
-**6.1 Answer when it asks.** The agent works on its own, but stops at five points and waits for your "yes":
-1. It shows what it exported from GoHighLevel. Check the numbers.
+**6.1 Answer when it asks.** The agent works on its own, but waits for your "yes" at each applicable checkpoint:
+1. If importing from GoHighLevel, it shows the export for you to review.
 2. It shows the text for the AWS request to start sending. After that, watch your inbox, because AWS may email you questions.
 3. DNS: either it shows what it will add in Cloudflare, or it gives you the table from 4B.2.
-4. It shows how your contacts will be imported.
+4. If importing contacts, it shows the import preview and counts.
 5. It shows the test results before any email goes to real people.
 
 📸 `06-04-checkpoint-example.png`: an example of the agent stopping and asking for approval.
@@ -301,7 +300,7 @@ Expect it to take a couple of days in total, mostly waiting for AWS and DNS.
 
 **7.1b Decide about the agent's API key.** The agent asks whether it should keep its Mailroom API key. Keep it if you want a coding agent to help you later (e.g. "write and send this month's newsletter"). Otherwise the agent deletes it. You can always create a new one in Mailroom under **API tokens**.
 
-**7.2 Switch the forms on your website.** The agent gives you new form code or a new URL. Put it in place of the GoHighLevel forms (or ask your web agency to do it).
+**7.2 Add forms to your website.** If you configured sign-up forms, the agent gives you embed code or a hosted form URL. Add it to your website, or replace an existing form if you are migrating.
 
 **7.3 Turn off the setup keys.** Do this on the day the agent finishes: the AWS setup key in particular can hand out any permission in your AWS account (step 2.6).
 - **AWS:** IAM → Users → `setup-agent` → Security credentials → **Deactivate** on the access key, then **Delete** it. If you ever need the agent's help with AWS again (e.g. moving to a new server), create a new access key for that day and delete it afterwards; never switch an old key back on.
@@ -310,8 +309,8 @@ Expect it to take a couple of days in total, mostly waiting for AWS and DNS.
 
 📸 `07-03a-aws-deactivate.png`, `07-03b-cf-delete.png`, `07-03c-hetzner-delete.png`: each button highlighted.
 
-**7.4 After {{SHUTDOWN_DATE}}:** Delete the old GoHighLevel DNS records from the list the agent gives you.
+**7.4 Optional migration cleanup.** If you migrated from another service, review whether any old DNS records are still in use. Ask the agent to check them before making changes.
 
-**7.5 Keep the `ghl-export` folder safe.** It's your proof of where your contacts came from. Store it somewhere private, not on a shared drive.
+**7.5 Store any contact exports privately.** If you imported contacts, retain the source files and consent records in a private location.
 
 Done. From now on, `OPERATIONS.md` tells you how to send a newsletter and change your sequences, either in Mailroom's web interface or by asking a coding agent to do it through Mailroom's API.
