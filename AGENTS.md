@@ -5,12 +5,14 @@
 
 When the user asks to set up Mailroom, or opens with **"start"**, **"go"** or **"hi"**, lead them through the **guided setup** below, then the applicable technical runbook phases (0–11). At the end, switch this file to operations mode (§ "Finishing the setup"). For a specific development or documentation request, complete that request without starting setup. The user does not need to read any guide: you tell them, one small step at a time, what to do.
 
+This repository is also the reusable installation kit. A documentation or development change must leave its setup marker `not-started`; only mark the customer's actual deployment copy complete. Never copy a customer's `.env`, `secrets/`, exports, domains, server addresses or account IDs into the reusable kit.
+
 ### Guided setup
 
 1. **Welcome.** Reply in the user's language. In a few sentences, say what happens:
    - you'll set up Mailroom with Amazon SES for contacts, newsletters, sign-up forms, and drip sequences; importing existing GoHighLevel data is optional;
    - they create a few accounts and keys, and you do the technical work;
-   - it takes about 1–2 hours of their time over a couple of days, mostly waiting for AWS and DNS;
+   - a new-account setup can take about 1–2 hours of their time over a couple of days, mostly waiting for AWS and DNS; existing accounts and SES production access can shorten this considerably;
    - you'll ask for their "yes" at the applicable checkpoints before importing data, changing DNS, requesting SES production access, or enabling live sending.
 
    If `PROGRESS.md` exists, a previous session was interrupted: say so, read it, and continue where it stopped.
@@ -20,22 +22,25 @@ When the user asks to set up Mailroom, or opens with **"start"**, **"go"** or **
    - Linux: `xdg-open .env`, or tell them to use their usual editor.
 
    Tell the user: keep this window open, paste each key on its line right after the `=`, and save (Ctrl+S / Cmd+S) after each change. Don't type quotes; you add those yourself where needed.
-3. **Walk through the accounts, one step at a time,** following [guide/steps.md](guide/steps.md) Parts 1–5. That file is your script: for each step, tell the user in plain words what to click (with the link), wait until they say it's done, then check the result before the next step.
-   - **Starting point:** ask whether this is a fresh installation or an import from GoHighLevel. Record the choice in `PROGRESS.md`. For a GHL import, follow Part 1 and run phase 1 once the token works. For a fresh installation, skip Part 1, GHL credentials and checks, phase 1 and CHECKPOINT 1; start with Part 2. Skip any other migration-only steps that do not apply.
-   - **Skip what doesn't apply.** Ask early: do they already have a Coolify server (`DEPLOY_TARGET=coolify`) or should you create a Hetzner server (`vps`)? Is their domain on Cloudflare (`DNS_MODE=cloudflare`) or elsewhere (`manual`)?
-   - **Values that aren't secret** (domain, company name and address, sender name and addresses, timezone, the choices above): ask in the chat and write them into `.env` yourself. Quote values that contain spaces (`FROM_NAME="Their Company"`).
+3. **Walk through missing account steps, one step at a time,** following [guide/steps.md](guide/steps.md) Parts 1–5. For a step the user must perform, explain what to click (with the link), wait until they say it's done, then check it. When accounts, a server, credentials or signed-in browser sessions already exist, validate and reuse them; don't make the user recreate them or repeat answered questions. Prefer service APIs/CLIs once scoped credentials are available, using the signed-in browser for work they cannot cover. Respect the browser/tool's own permission and security requirements.
+   - **Starting point:** establish whether this is a fresh installation or a GoHighLevel import, asking only if not already clear. Record the choice in `PROGRESS.md`. For a GHL import, follow Part 1 and run phase 1 once the token works. For a fresh installation, skip Part 1, GHL credentials and checks, phase 1 and CHECKPOINT 1; start with Part 2. Skip any other migration-only steps that do not apply.
+   - **Skip what doesn't apply.** Establish whether to use an existing VPS (`VPS_HOST`/`VPS_SSH_USER`), an existing Coolify server (`DEPLOY_TARGET=coolify`), or create a Hetzner server (`vps` plus `HCLOUD_TOKEN`). An existing VPS does not require a Hetzner token or CLI. Establish whether DNS is on Cloudflare (`DNS_MODE=cloudflare`) or elsewhere (`manual`).
+   - **Values that aren't secret** (sending domain, public app URL, company name and postal address, sender/reply-to/owner addresses, timezone, the choices above): collect missing values in one concise chat question and write them into `.env` yourself. Quote values that contain spaces (`FROM_NAME="Their Company"`). Check copied business metadata with the user rather than trusting an old address or country field. Resolve sender and reply-to domain compatibility before provisioning.
+   - **Separate app and sending domains:** `DOMAIN` is the exact sending domain, which can be a subdomain. The app defaults to `https://APP_SUBDOMAIN.DOMAIN`; use `BASE_URL` for a different public address, e.g. sending on `mail.example.com` with the app at `https://mailroom.example.com`. Both From and Reply-To must still be on `DOMAIN`. See [deployment notes](deploy/agent-notes.md) before generating DNS for this case.
    - **Secrets** (GHL token, AWS keys, Hetzner, Cloudflare and Coolify tokens): never ask for them in the chat, because the chat is saved. Tell the user to paste them into the open `.env` and save. If they paste one into the chat anyway, don't repeat it. Write it into `.env`, and tell them to create a new key at the end of the setup and delete that one.
    - **Check each value without showing it:** read `.env`, check that it's filled in and has the right shape, and where possible make the read-only call from phase 0 (e.g. the GHL location, `aws sts get-caller-identity`). If a check fails, say which value and what to look at, but never print the value.
+   - **Keep settings current:** merge only the intended keys into the latest `.env`; don't replace it from an old in-memory copy. If you edit it while the user's editor is open, tell them to reload before saving further changes. Use private directories/files (0700/0600 where supported), and exclude secret values from browser snapshots, screenshots and tool output as well as chat.
    - **Steps the user must do themselves:** creating accounts, passwords, payment, phone or ID checks, and two-factor setup. Explain where to click, then wait.
    - **Files for the user (Part 1.5/1.6):** create `ghl-export/workflows/<name>/` with a `workflow.md` copied from `_template.md`, and open the files they have to fill in (`workflow.md`, `_overview.md`) in the simple text editor, like `.env`. They can also describe a workflow in the chat while you write the file.
    - Write each finished step to `PROGRESS.md`, so a new session can continue.
-4. When the applicable steps in Parts 1–5 are done and phase 0 passes, tell the user that you now do the technical work and will stop at the applicable checkpoints. Then run the applicable phases below.
+4. When the applicable steps in Parts 1–5 are done and phase 0 passes, tell the user that you now do the technical work and will stop at the applicable checkpoints. Use the [parallel execution plan](#execution-and-parallel-work) below. Missing legacy workflow decisions need not block an otherwise ready baseline deployment if the user explicitly defers those migrations at CHECKPOINT 1.
 
 ### Finishing the setup
 
-After phase 11, rewrite the top of this file, from the status marker down to (not including) the line `# Technical runbook (reference)`:
+After phase 11, rewrite the customer's deployment copy from the status marker down to (not including) the actual heading line `# Technical runbook (reference)`. Locate it with an anchored multiline match such as `^# Technical runbook \(reference\)$`, **not the first substring occurrence**, which also appears in these instructions:
 - Set the marker to `<!-- MAILROOM-SETUP-STATUS: complete -->`.
 - Replace this whole section with the **operations mode** section below. Fill in the `«…»` placeholders, and keep the runbook underneath as reference.
+- Verify there is one setup marker, one operations-mode section, no unfilled placeholders in that section, and that the technical-runbook suffix is unchanged. Record any installation-specific resource isolation or hostname exceptions so future agents do not run the default provisioner against the wrong installation.
 
 Tell the user that from now on they can open the agent here and ask things like "write and send this month's newsletter" or "change the second welcome email".
 
@@ -47,7 +52,7 @@ The setup finished on «date». **Don't run the guided setup or phases 1–11 ag
 **This installation**
 - Mailroom: «https://newsletter.example.com» (admin UI at `/admin/`, API at `/api/v1/`, API guide at `/api/v1/docs`)
 - Runs on: «Hetzner server name and IP, or the Coolify application name and server»
-- Amazon SES: region «eu-central-1», production access «yes/no»
+- Amazon SES: region «actual region», production access «yes/no»
 - API token for you: «secrets/api-token.txt (name setup-agent), or: none kept, so ask the user to create one under API tokens in the UI and paste it into secrets/api-token.txt»
 - How-to for the user: [OPERATIONS.md](OPERATIONS.md)
 
@@ -103,10 +108,32 @@ Website form ─► Mailroom (one container, SQLite, HTTPS) ─► Amazon SES �
 
 **How you work with Mailroom:**
 - The **CLI** is only for provisioning and bootstrap: `mailroom provision ses`, `mailroom provision dns`, `mailroom dns records`, `mailroom doctor`, `mailroom admin create`, `mailroom token create` (plus `backup`, `restore` and `version` for operations). On the server they run in the container, in `/opt/mailroom/`, as `sudo docker compose run --rm mailroom …` (before Mailroom runs) or `sudo docker compose exec mailroom mailroom …` (while it runs). Every command accepts `--json`. Exit codes: 0 ok, 1 error, 2 a check failed or needs a human.
-- **Everything else goes through the REST API** at `https://APP_SUBDOMAIN.DOMAIN/api/v1/`, with `Authorization: Bearer <token>` (the admin token from phase 5). Send an `Idempotency-Key` header on every POST, `If-Match` with the `ETag` from the last GET on every PATCH/PUT, and use `?dry_run=true` first where it is offered (imports, enrolments, broadcast send, forms, layout and more; an operation without a dry run answers `422` on `query.dry_run` and changes nothing). After a `400` or `422`, fix the request and send it with a **new** `Idempotency-Key`; reuse a key only to retry the unchanged request after a `5xx`, `429` or timeout. Long work (imports, backups, broadcast sends, large enrolments) answers `202` with a job: poll `GET /api/v1/jobs/{id}` until `status` is `succeeded` or `failed`.
-- The web interface is at `https://APP_SUBDOMAIN.DOMAIN/` (it opens `/admin/`). The customer uses it after the handover; you use the API.
+- **Everything else goes through the REST API** at the effective public base URL plus `/api/v1/`, with `Authorization: Bearer <token>` (the admin token from phase 5). The base URL is `BASE_URL` when set, otherwise `https://APP_SUBDOMAIN.DOMAIN`. Send an `Idempotency-Key` header on every POST, `If-Match` with the `ETag` from the last GET on every PATCH/PUT, and use `?dry_run=true` first where it is offered (imports, enrolments, broadcast send, forms, layout and more; an operation without a dry run answers `422` on `query.dry_run` and changes nothing). After a `400` or `422`, fix the request and send it with a **new** `Idempotency-Key`; reuse a key only to retry the unchanged request after a `5xx`, `429` or timeout. Long work (imports, backups, broadcast sends, large enrolments) answers `202` with a job: poll `GET /api/v1/jobs/{id}` until `status` is `succeeded` or `failed`.
+- Confirm methods and request schemas against the running `/api/v1/openapi.json` instead of guessing. For example, stored-email preview is **POST** `/api/v1/emails/{id}/preview`, not GET. Save private responses locally and display only the relevant counts/statuses. Reuse a small host-restricted API helper rather than rewriting authentication and retry handling for every call; never log its token.
+- The web interface is at the effective public base URL (it opens `/admin/`). The customer uses it after the handover; you use the API.
 
 ---
+
+## Execution and parallel work
+
+**Use sub-agents for independent deployment work when available**, unless the user or higher-priority instructions require a single agent. One coordinator retains the customer conversation, settings, approvals and final integration. Keep guided account creation sequential when the user is doing it; run technical work in parallel once its inputs and authorization are ready.
+
+| Workstream | Useful independent work | Boundary / handoff |
+|---|---|---|
+| Migration agent | Read-only GHL export, reconciliation, workflow/email/form capture and conversion proposals | Return report, private source paths and unresolved decisions. Never modify GHL, import into Mailroom, activate or enrol contacts. |
+| Server agent | Inspect existing VPS; prepare SSH/sudo/hardening/deployment scripts; after authorization harden, copy source and build | Verify key login and `sudo -n true` before SSH lockdown. Return health/build evidence and private credential paths. Don't start before public DNS/runtime readiness. |
+| AWS agent | Read-only account/region/resource inventory; prepare or execute authorized isolated provisioning | Return DNS records and a private sender-only runtime artifact. No DNS changes, production request, key rotation or email sends outside the approved scope. |
+| Coordinator | Resolve settings/scope, own DNS plan and cutover, API configuration/imports/tests, approvals and handover | Record every checkpoint decision and reconcile agent outputs before dependent writes. |
+
+- Read-only preflight checks can overlap with migration capture and local script preparation. After preflight and the applicable export-review checkpoint, server copy/build and approved AWS provisioning can run concurrently. While DNS/SES verification catches up, prepare API payloads, test plans and handover documentation. Run independent API reads concurrently; keep dependent writes and uncertain-result reconciliation sequential.
+- Give each agent a narrow task, owned files, input paths, exact mutation authority, stop conditions and output contract. Share secret **file paths**, never credential values. The coordinator alone edits `.env`, `PROGRESS.md`, the approval ledger and the final `AGENTS.md` mode switch. Workers return their own notes instead of racing on those files.
+- Give browser work an exclusive tab/account owner. Each agent must discover its own available browser/tab handles; IDs and accessibility indices are not portable across agents. Use a dedicated signed-in tab when another agent owns the original. Never have two agents edit the same console page.
+- Store resumable scripts and private responses under `secrets/`; capture a resource ledger and generated key securely before continuing. Before retrying an uncertain create/send/bootstrap, read its current state. Never create another key or admin account merely because the first response was delayed.
+- Keep `PROGRESS.md` concise: confirmed scope/settings, phase state, resource IDs/paths, each checkpoint's exact approved action, pending dependencies, and next safe step. Record which worker owns an in-flight mutation so a resumed session does not repeat it.
+- Ask only for missing decisions or required approvals. Prepare a concrete plan/report first; batch related missing non-secret settings and foreseeable credential-scope approvals where permitted. A checkpoint approval never authorizes a different checkpoint, and delegation never expands the user's authorization.
+- Don't wait for every legacy automation detail before asking whether the customer wants a baseline launch. At CHECKPOINT 1 they may explicitly defer sequences/forms while approving the verified contact export and infrastructure work. Record that scope; keep deferred migrations inactive and distinguish them from completed work at handover.
+
+Read [deployment exceptions and troubleshooting](deploy/agent-notes.md) for existing AWS installations, separate hostnames, staged cutover and DNS-cache issues. Read [migration evidence and limitations](guide/migration-notes.md) when importing GHL data. These notes supplement the checkpoints; they do not bypass them.
 
 ## Ground rules
 
@@ -125,6 +152,7 @@ Website form ─► Mailroom (one container, SQLite, HTTPS) ─► Amazon SES �
 6. **One sending domain:** `DOMAIN`. `FROM_EMAIL` and `REPLY_TO_EMAIL` must be on it (Mailroom refuses to start otherwise). If they are not, stop and ask.
 7. **Log progress** in `PROGRESS.md`: phase, status and important IDs (no secrets). If you are interrupted, read `PROGRESS.md` and continue from there.
 8. **If Mailroom behaves differently from its docs,** trust what it actually does, work around it if it's safe, and note the difference in `OPERATIONS.md`. Mailroom is MIT-licensed and the source is in `app/`, so you may fix a clear bug there. If you do, tell the customer and record the change in `OPERATIONS.md`.
+9. **Existing AWS resources are not disposable setup leftovers.** Inventory identities, configuration sets/destinations, SNS policies/subscriptions, sender-user policies/keys, buckets and active receipt rules before provisioning. The default CLI uses fixed names and can converge resources belonging to another installation. Follow the isolation decision in [deployment notes](deploy/agent-notes.md); never use `--rotate-keys` to resolve an unowned or unexplained existing key.
 
 ---
 
@@ -136,22 +164,24 @@ Website form ─► Mailroom (one container, SQLite, HTTPS) ─► Amazon SES �
   - `curl`, and `jq` if you want it for the API recipes (optional).
 
   If a CLI can't be installed, call the same services' HTTP APIs with `curl` instead.
-- Read `.env`, and check that the required fields are filled in. With `DEPLOY_TARGET=vps` (or empty), either `HCLOUD_TOKEN` or `VPS_HOST` must be set. GHL fields are required only for a GHL import. With `DEPLOY_TARGET=coolify`, either `COOLIFY_URL` + `COOLIFY_API_TOKEN` are set (you deploy through Coolify's API) or the customer will click through Coolify themselves (deploy/coolify.md §4 "By hand"); you also need Go 1.26+ on this machine for the SES and DNS commands (deploy/coolify.md §1). With `DNS_MODE=cloudflare`, `CLOUDFLARE_API_TOKEN` must be set.
+- Read `.env`, and check that the required fields are filled in. With `DEPLOY_TARGET=vps` (or empty), either `HCLOUD_TOKEN` or `VPS_HOST` must be set. GHL fields are required only for a GHL import. With `DEPLOY_TARGET=coolify`, either `COOLIFY_URL` + `COOLIFY_API_TOKEN` are set (accept an already supplied `COOLIFY_API_KEY` as a private input alias) (you deploy through Coolify's API) or the customer will click through Coolify themselves (deploy/coolify.md §4 "By hand"); you also need Go 1.26+ on this machine for the SES and DNS commands (deploy/coolify.md §1). With `DNS_MODE=cloudflare`, `CLOUDFLARE_API_TOKEN` must be set.
 - Validate each key with one read-only call:
   - GHL (only for a GHL import): fetch the location (`GET /locations/{GHL_LOCATION_ID}`).
-  - AWS (setup keys, `AWS_REGION`): `aws sts get-caller-identity` and `aws sesv2 get-account`. Note whether `ProductionAccessEnabled` is false (sandbox).
-  - Hetzner (vps): list servers (`hcloud server list`).
+  - AWS (setup keys, `AWS_REGION`): `aws sts get-caller-identity` and `aws sesv2 get-account`. Save private output and summarize account/region, production and sending status, health and quota; don't dump another installation's use-case details or key metadata. Production access is regional: if already enabled in the chosen region, skip the production-access request and CHECKPOINT 2.
+  - If AWS reports an organization/service-control-policy deny or a region/project restriction, distinguish that from a missing IAM permission before creating more keys. Check the account's allowed region and existing SES production access. A usable approved region may avoid a plan change and approval delay; account/payment/plan changes remain the user's decision.
+  - Hetzner (only when using `HCLOUD_TOKEN`): list servers (`hcloud server list`). With a supplied VPS, inspect that host over SSH instead; don't create a replacement server.
   - Coolify: `GET $COOLIFY_URL/api/v1/version` and `GET $COOLIFY_URL/api/v1/servers` with `Authorization: Bearer $COOLIFY_API_TOKEN`; note the server's public IP and that its proxy is running. Check that Coolify can read this repository (a GitHub App or deploy key, deploy/coolify.md §1).
-  - Cloudflare: verify the token (`GET /client/v4/user/tokens/verify`) and find the zone for `DOMAIN` (`GET /client/v4/zones?name=DOMAIN`).
+  - Cloudflare: verify the token (`GET /client/v4/user/tokens/verify`) and find the authoritative zone for `DOMAIN`. A sending subdomain may live in its parent zone: try `name=DOMAIN`, then successive parents until the closest authorized zone is found (the CLI's `FindZone` already does this). Record the zone ID. Also resolve the zone for the actual app hostname if different; don't broaden token permissions merely because querying a subdomain returned no zone.
 - With `DNS_MODE=manual`: look up the nameservers for `DOMAIN`, and tell the customer which provider hosts their DNS.
-- Check that `APP_SUBDOMAIN.DOMAIN` and `MAIL_FROM_SUBDOMAIN.DOMAIN` (defaults `newsletter` and `bounce`) don't already exist in DNS. If one does, ask for another name. Also note whether `_dmarc.DOMAIN` has a TXT record (phase 4).
+- Check the actual app hostname (`BASE_URL` host, or `APP_SUBDOMAIN.DOMAIN`) and `MAIL_FROM_SUBDOMAIN.DOMAIN` (defaults `newsletter` and `bounce`) for existing A/AAAA/CNAME or MX/TXT records as applicable. If occupied, inspect ownership and intent: adopt only a verified record belonging to this installation, otherwise choose another name or review the conflict with the user. Also note whether `_dmarc.DOMAIN` has a TXT record (phase 4).
 - Check whether `OWNER_EMAIL` is on `DOMAIN` (ground rule 4).
-- Note whether `DOMAIN` has MX records, and where they point. Mailroom receives the domain's email by default (its Inbox, phase 3), but only when `DOMAIN` has no MX record yet: an existing mailbox (Google Workspace, Microsoft 365, the web host's mail) is never replaced, and `provision ses` then leaves receiving off. Tell the customer which case applies.
+- Note whether `DOMAIN` has MX records, and where they point. If sending on a subdomain, distinguish its MX from the root domain's mailbox records. Mailroom receives the sending domain's email by default (its Inbox, phase 3), but the default provisioner leaves receiving off when existing MX points elsewhere. Preserve Google Workspace, Microsoft 365 or other mailboxes. If the owner explicitly wants to replace an old sending/receiving provider on a subdomain, prepare the staged cutover in [deployment notes](deploy/agent-notes.md) instead of deleting MX early or pretending `--no-receive` performs a migration.
+- Complete the existing-AWS-resource collision check (ground rule 9) before any `provision ses` call. Record whether default provisioning is safe, or which isolated plan is required.
 - Report to the customer: what works, what is missing, and the plan.
 
 ## Phase 1: Optional GoHighLevel export
 
-Run this phase only when the user chooses a GHL import. It produces files for the import. Use GHL API v2 (`https://services.leadconnectorhq.com`) with `Authorization: Bearer $GHL_TOKEN` and the `Version` header specified in GHL's documentation.
+Run this phase only when the user chooses a GHL import. It produces files for the import. Use the documented HighLevel endpoints (`https://services.leadconnectorhq.com`) with `Authorization: Bearer $GHL_TOKEN`, the version appropriate to each endpoint and a descriptive User-Agent. Do not assume every current endpoint uses the same version. Follow [migration notes](guide/migration-notes.md) for pagination, feature-gated workflow definitions, suppression evidence and browser capture.
 
 1. Fetch with pagination and save raw JSON in `ghl-export/raw/`:
    - all contacts with all fields, incl. `tags`, `dnd`, `dndSettings`, `customFields`, `source`, `dateAdded`,
@@ -170,7 +200,7 @@ Run this phase only when the user chooses a GHL import. It produces files for th
 4. Read `ghl-export/workflows/` and `_overview.md`, and summarize each flow in a table: trigger, steps, delays, conditions, and what to do with contacts mid-flow. Flag anything unclear.
 5. Write `ghl-export/REPORT.md` with counts per status, tags, flows and forms, and what cannot be migrated (SMS, calendars etc.).
 
-⛔ **CHECKPOINT 1:** Show the report. Ask the customer to confirm the numbers and the flow summary and to answer any open questions.
+⛔ **CHECKPOINT 1:** Show the report. Ask the customer to confirm the numbers and the verified flow summary and to answer any open questions. They may explicitly approve the reconciled export/infrastructure work while deferring unresolved legacy flows/forms. Record the exact deferred scope; it authorizes neither a later contact import nor any activation, enrolment or replay. Continue the server/AWS work in parallel within the approved scope.
 
 ## Phase 2: Server
 
@@ -187,7 +217,7 @@ Run this phase only when the user chooses a GHL import. It produces files for th
   - Enable `unattended-upgrades`.
   - Set up `ufw` as an extra layer (allow 22, 80 and 443).
   - Set the timezone to UTC.
-- Install Docker Engine and the Compose plugin from Docker's official repository (Docker Engine 27 or newer, for the IPv6 network in the compose file).
+- Install Docker Engine and the Compose plugin from Docker's official repository (Docker Engine 27 or newer, for the IPv6 network in the compose file). For a supplied server, check Docker's current official OS support before assuming a newer Ubuntu LTS needs reinstalling or substituting an older release's package repository.
 - Write the server's IPv4 (and IPv6) to `PROGRESS.md`.
 
 ## Phase 3: Build Mailroom and provision SES
@@ -195,10 +225,10 @@ Run this phase only when the user chooses a GHL import. It produces files for th
 Follow [deploy/README.md](deploy/README.md) for the exact commands. Run every `docker compose` command in `/opt/mailroom/` on the server, with `sudo`. The steps are:
 
 1. Copy the kit to `/opt/mailroom/` on the server: `app/` as a directory (with `vendor/`) and the **contents** of `deploy/`, so `docker-compose.yml` sits next to `app/` (deploy/README.md §1).
-2. Create `/opt/mailroom/.env` **before** the first `docker compose` command, without an editor (`sudo tee` fed over ssh, deploy/README.md §2), with the customer's sender settings from the local `.env`: `DOMAIN`, `FROM_NAME`, `FROM_EMAIL`, `REPLY_TO_EMAIL`, `COMPANY_FOOTER`, `OWNER_EMAIL`, `TIMEZONE`, `APP_SUBDOMAIN`, `MAIL_FROM_SUBDOMAIN` and `AWS_REGION`. Leave out all setup keys and everything GHL, Hetzner and DNS related. Then give `.env` and a new `data/` directory to the container user, uid 65532, with mode 600 and 700 (deploy/README.md §2). Because `.env` then belongs to that user, run every `docker compose` command with `sudo`.
+2. Create `/opt/mailroom/.env` **before** the first `docker compose` command, without an editor (`sudo tee` fed over ssh, deploy/README.md §2), with the customer's sender settings from the local `.env`: `DOMAIN`, `FROM_NAME`, `FROM_EMAIL`, `REPLY_TO_EMAIL`, `COMPANY_FOOTER`, `OWNER_EMAIL`, `TIMEZONE`, `APP_SUBDOMAIN`, `MAIL_FROM_SUBDOMAIN`, `AWS_REGION` and `BASE_URL` when set. Leave out all setup keys and everything GHL, Hetzner and DNS related. Then give `.env` and a new `data/` directory to the container user, uid 65532, with mode 600 and 700 (deploy/README.md §2). Because `.env` then belongs to that user, run every `docker compose` command with `sudo`.
    - The sender settings (`FROM_*`, `REPLY_TO_EMAIL`, `COMPANY_FOOTER`, `OWNER_EMAIL`, `TIMEZONE`) are copied into Mailroom's settings only once, by the first `doctor` run (phase 4) or the first start. After that, change them with `PATCH /api/v1/settings`, not in `.env`. `COMPANY_FOOTER` (company name and postal address) is required in practice: without it Mailroom sends no broadcast or sequence email.
 3. Run `sudo docker compose build`.
-4. Run the SES provisioning, passing the setup keys **for this run only**, through ssh's standard input and by name (deploy/README.md §4; ground rule 1):
+4. **Only after the collision check confirms these default resources belong to this installation**, run SES provisioning, passing the setup keys **for this run only**, through ssh's standard input and by name (deploy/README.md §4; ground rule 1). For a shared AWS account with another installation, use the reviewed isolation plan in [deployment notes](deploy/agent-notes.md) instead; the current CLI has no resource-namespace flag:
 
    ```bash
    printf '%s\n%s\n' "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" | ssh SERVER '
@@ -211,7 +241,7 @@ Follow [deploy/README.md](deploy/README.md) for the exact commands. Run every `d
    It creates (or, when run again, checks and repairs) the SES domain identity with Easy DKIM, the custom MAIL FROM `MAIL_FROM_SUBDOMAIN.DOMAIN`, the configuration set `mailroom`, the SNS topic `mailroom-ses-events`, the backup bucket `mailroom-backup-ACCOUNT-REGION` (left out with `--no-backup-bucket`) and the sending user `mailroom-sender`. It writes `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` of the **sending** user, `AWS_REGION`, `SNS_TOPIC_ARN`, `SES_CONFIGURATION_SET` and `BACKUP_BUCKET` to `/opt/mailroom/.env`, and prints the DNS records (`dns_records` in the JSON; the A/AAAA record comes in phase 4). Save the records, `production_access_enabled` and any `warnings` in `PROGRESS.md`.
    - **Receiving email** is set up by default: the inbound bucket `mailroom-inbound-ACCOUNT-REGION`, the SES receipt rule set `mailroom` and its rule, and `INBOUND_BUCKET`/`INBOUND_DOMAIN` in `.env` (`inbound_domain` in the JSON); the records then include `MX DOMAIN 10 inbound-smtp.REGION.amazonaws.com`. It is left off, with a warning, when `DOMAIN` already has other MX records (phase 0), another receipt rule set is active, the region has no SES receiving, or the setup key lacks the `CreateMailroomInboundBucket` permissions of guide step 2.6. Only pass `--no-receive` when the customer explicitly doesn't want Mailroom to receive the domain's email. Tell the customer the outcome in one line.
    - If it stops before changing anything because it can't write `.env`, fix the owner as in deploy/README.md §2 and run it again.
-   - It is safe to run again. If it says the sending user already has a key that is not in `.env`, run it again with `--rotate-keys`.
+   - Rerunning converges the same installation's resources; it is not safe adoption of another installation. If a sender key is absent from this server's `.env`, establish ownership and whether another running app uses it before proposing rotation. Never use `--rotate-keys` as an automatic retry. A newly created key can briefly fail a read-only identity check during IAM propagation: reconcile the saved key and retry only that check with bounded backoff, without creating/rotating another key.
 5. If `production_access_enabled` is false (the SES sandbox), draft the production access text in `secrets/ses-use-case.txt` (200 to 5,000 characters):
    - how contacts opt in and how consent is recorded; for migrated contacts, use the export as evidence, and for a fresh installation, describe the planned sign-up process without claiming an existing list,
    - the current or planned number of contacts and expected volume, confirmed with the user,
@@ -223,20 +253,22 @@ Follow [deploy/README.md](deploy/README.md) for the exact commands. Run every `d
 
 ## Phase 4: DNS
 
-The records are: an A (and AAAA) record for `APP_SUBDOMAIN.DOMAIN` pointing to the server, the 3 DKIM CNAMEs, the MAIL FROM MX + TXT (SPF), and, with receiving on, the MX record of `DOMAIN` itself pointing to SES receiving. Say plainly at CHECKPOINT 3 that this MX record sends all email for the domain to Mailroom's Inbox. If `_dmarc.DOMAIN` doesn't exist, also propose a monitoring-only DMARC record, and create it only after a yes. With `OWNER_EMAIL` on `DOMAIN` it is `v=DMARC1; p=none; rua=mailto:OWNER_EMAIL`. If `OWNER_EMAIL` is on another domain (e.g. Gmail), Mailroom proposes `v=DMARC1; p=none` without `rua`: reports to another domain need an authorization record there, so receivers would send none. Ask the customer whether they want the reports at an address on `DOMAIN`; if so, add that `rua` to the record by hand.
+The records are: an A (and AAAA) record for the actual public app hostname pointing to the server, the 3 DKIM CNAMEs, the MAIL FROM MX + TXT (SPF), and, with receiving on, the MX record of `DOMAIN` itself pointing to SES receiving. Say plainly at CHECKPOINT 3 that this MX record sends all email for that exact domain to Mailroom's Inbox; a sending subdomain cutover need not change the root domain's mailbox. If `_dmarc.DOMAIN` doesn't exist, also propose a monitoring-only DMARC record, and create it only after a yes. With `OWNER_EMAIL` on `DOMAIN` it is `v=DMARC1; p=none; rua=mailto:OWNER_EMAIL`. If `OWNER_EMAIL` is on another domain (e.g. Gmail), Mailroom proposes `v=DMARC1; p=none` without `rua`: reports to another domain need an authorization record there, so receivers would send none. Ask the customer whether they want the reports at an address on `DOMAIN`; if so, add that `rua` to the record by hand.
 
-Both commands read the DKIM tokens from SES with the sending keys in `/opt/mailroom/.env`, so they need no setup keys (only Cloudflare needs its token). Always pass the server's addresses: `--ipv4 IPV4` (and `--ipv6 IPV6` if it has one). Without them the A/AAAA record is left out, and HTTPS fails in phase 5. Add `--dmarc` only for the DMARC record the customer said yes to. Run the commands as in deploy/README.md §5 (`sudo docker compose run --rm mailroom …`).
+Both commands read the DKIM tokens from SES with the sending keys in `/opt/mailroom/.env`, so they need no setup keys (only Cloudflare needs its token). For the default app hostname, pass the server's addresses: `--ipv4 IPV4` (and `--ipv6 IPV6` if it has one). Without them the A/AAAA record is left out, and HTTPS fails in phase 5. **If `BASE_URL` uses a different hostname, the current DNS generator still proposes `APP_SUBDOMAIN.DOMAIN`: generate mail records without the IP flags and add the actual app host's A/AAAA explicitly in the reviewed provider/API plan.** Do not create the wrong hostname. Add `--dmarc` only for the DMARC record the customer said yes to. Run the commands as in deploy/README.md §5 (`sudo docker compose run --rm mailroom …`).
 
 - **`DNS_MODE=cloudflare`:** Run `mailroom provision dns --cloudflare --ipv4 IPV4 --ipv6 IPV6`, with `CLOUDFLARE_API_TOKEN` for that run only, passed like the AWS keys in phase 3 (over ssh's standard input, `-e CLOUDFLARE_API_TOKEN` by name). Without `--yes` it changes nothing: it prints the records it would create, the ones already present, and any conflicts (existing records it will never change; exit code 2).
 - **`DNS_MODE=manual`:** Run `mailroom dns records --ipv4 IPV4 --ipv6 IPV6`, and give the customer the table. Names in it are fully qualified; some DNS providers want only the part before `DOMAIN`. Tell them which provider to log in to (from phase 0). Then wait until they say it's done.
 
 ⛔ **CHECKPOINT 3:** For Cloudflare, show the plan and apply it by running the same command with `--yes` after a yes. If there are conflicts, show them and decide with the customer. For manual DNS, the customer's "done" counts as the yes.
 
-Afterwards run `sudo docker compose run --rm mailroom doctor --json` until the DNS checks and the SES identity check pass. Before Mailroom runs, the HTTPS, SNS and backup checks can't pass yet, so the exit code stays 2: read the individual checks. If a record is missing or wrong, tell the customer exactly which one.
+When replacing an old mail provider, the approved plan can have stages: create app/DKIM/MAIL FROM records first, start and verify HTTPS/SNS and the new receiving configuration, then replace the sending domain's MX only after readiness. Leave the old MX in place if readiness fails. The default DNS provisioner does not delete or replace existing records; use the exact separately reviewed provider/API plan for that cutover. Before deleting an old tracking CNAME, explain that links and unsubscribe links in previously sent emails may break and obtain explicit approval for that deletion. Check record IDs/values again before deletion and verify protected records afterward.
+
+Afterwards run `sudo docker compose run --rm mailroom doctor --json` until the DNS checks and the SES identity check pass. During a staged MX migration, the planned inbound-DNS failure is expected until cutover: proceed to phase 5 once the app, DKIM and MAIL FROM records pass, verify the running destination, then complete the approved MX change and recheck. Before Mailroom runs, the HTTPS, SNS and backup checks can't pass yet, so the exit code stays 2: read the individual checks. If another record is missing or wrong, tell the customer exactly which one.
 
 ## Phase 5: Start Mailroom and bootstrap
 
-1. Run `sudo docker compose up -d`, then `sudo docker compose ps` until `STATUS` shows `healthy`. On start, Mailroom migrates its database, gets its Let's Encrypt certificate for `APP_SUBDOMAIN.DOMAIN` and subscribes `/hooks/ses` to the SNS topic.
+1. Run `sudo docker compose up -d`, then `sudo docker compose ps` until `STATUS` shows `healthy`. On start, Mailroom migrates its database, gets its Let's Encrypt certificate for the effective public hostname and subscribes `/hooks/ses` to the SNS topic. A planned MX cutover can leave the doctor's inbound DNS check unhappy until the approved second stage; inspect the individual checks rather than rebuilding a healthy app. Diagnose stale local/browser DNS separately from authoritative records; never bypass TLS or a browser security policy to make a check pass.
 2. Run `sudo docker compose exec -T mailroom mailroom admin create --email OWNER_EMAIL` and redirect its output into `secrets/admin.txt`: it prints the generated password once.
 3. Run `sudo docker compose exec -T mailroom mailroom token create --name setup-agent --scope admin` and redirect its standard output into `secrets/api-token.txt`: it prints only the token (`mr_…`), once. From your machine, for example:
 
@@ -247,6 +279,8 @@ Afterwards run `sudo docker compose run --rm mailroom doctor --json` until the D
    **From here on, use the API.**
 4. Check the token with `GET /api/v1/me`.
 5. Check `GET /api/v1/system/doctor`: the HTTPS certificate, the SNS subscription and the SES identity must be `ok`. The backup check warns until the first backup (phase 6), and the production access check stays unhappy until AWS approves.
+
+Create each admin/token once, with output redirected into private files from the outset. If a result is uncertain, reconcile existing state before repeating bootstrap. Give the owner the effective app URL, login email and password file path early so they can sign in; ask them to confirm access before handover without pasting credentials into chat.
 
 ## Phase 6: Configure through the API
 
@@ -276,7 +310,7 @@ For a fresh installation, ask whether the user wants any sequences. Create only 
    - the delays,
    - the trigger: a tag (`trigger.tag`), or none when a form starts it (the form's `sequence_id`, phase 9),
    - the exit tags.
-2. Import each file with `POST /api/v1/sequences/import?dry_run=true` (JSON: `yaml` plus the body files in `files`, no `Idempotency-Key`), then without `dry_run` (with an `Idempotency-Key`).
+2. Import each approved file with `POST /api/v1/sequences/import?dry_run=true` (JSON: `yaml` plus the body files in `files`), then without `dry_run`. Send a fresh `Idempotency-Key` on each POST, as in the API conventions above. Do not flatten unsupported branches, AI/webhook actions or unresolved timing into a sequence; keep their capture/proposal pending the owner's decision.
 3. Test each sequence while **no real contact is enrolled** in it:
    - Temporarily shorten the delays with `PATCH /api/v1/sequences/{id}/steps/{step_id}` (`delay_seconds`). A delay change moves every waiting enrollment by the difference, which is why this happens before any real enrolment.
    - Create test contacts with `POST /api/v1/contacts/upsert` (ground rule 4 addresses only), and enrol them with `POST /api/v1/sequences/{id}/enrollments` or by adding the trigger tag with `POST /api/v1/contacts/{id}/tags`.
@@ -295,11 +329,13 @@ For a fresh installation, ask which forms the user wants and create those using 
 3. Give both to the customer in `FORMS.md`. The customer or their web agency puts them on the website. Don't change the website unless the customer gives you access and asks you to.
 4. Submit each form once with a test address (ground rule 4), e.g. on the hosted page, and check with `GET /api/v1/forms/{id}/submissions`, `GET /api/v1/contacts?q=ADDRESS` and `GET /api/v1/contacts/{id}/enrollments` that the contact, tags and sequence enrolment appear.
 
+For a GHL migration, inventory does not mean replace every form: booking/support/contact forms and SMS-only consent are not evidence of an email newsletter opt-in. Obtain the desired form scope first. If double opt-in is requested, verify pending status before confirmation, then follow the test email's confirmation page **and submit its confirmation button** (GET alone changes nothing); verify activation, consent and tags afterward. Keep unrelated legacy forms in place and deliver a new newsletter form only when requested.
+
 ## Phase 10: Verification
 
 - `GET /api/v1/system/doctor` must be all green (`ok`). The one exception: when the customer declined the DMARC record in phase 4 (and `_dmarc.DOMAIN` has none), `dns_dmarc` stays `warn`. Tell the customer at CHECKPOINT 5 that Gmail and Yahoo require DMARC from bulk senders, and that a monitoring-only record (`p=none`) changes nothing for their mail.
-- Send a real broadcast to test contacts only: tag the test contacts (ground rule 4) `mailroom-test`, create a segment on that tag with `POST /api/v1/segments`, create a broadcast with `POST /api/v1/broadcasts` and `audience` `{"type": "segment", "segment_id": N}`, check with `POST /api/v1/broadcasts/{id}/send?dry_run=true` that `recipients` is exactly the number of test contacts, then send it. Test sends (`/test`) are not enough here, because their unsubscribe and tracking links don't work.
-- In the inbox of a test address on `DOMAIN` (and a Gmail and an Outlook address once production access is granted), check the headers of the broadcast and of a sequence step:
+- Send a real broadcast to test contacts only: use a unique tag such as `mailroom-test-RUN_ID`, create a segment on that tag with `POST /api/v1/segments`, create a broadcast with `POST /api/v1/broadcasts` and `audience` `{"type": "segment", "segment_id": N}`, check with `POST /api/v1/broadcasts/{id}/send?dry_run=true` that its audience contains **only** the explicit owner/simulator address allowlist and `recipients` is exactly that count, then send it. Stop on a mismatch; never test against the whole imported list. Test sends (`/test`) are not enough here: they have no working unsubscribe/tracking links and omit the real broadcast's unsubscribe headers.
+- In an available owner-controlled inbox on `DOMAIN`, and owner-provided Gmail/Outlook test inboxes once production access is granted, check the headers of the broadcast and any sequences actually configured:
   - `dkim=pass` (d=DOMAIN),
   - `spf=pass` (MAIL FROM domain),
   - `dmarc=pass` (with no DMARC record the result is `dmarc=none` instead: report it as above),
@@ -309,6 +345,8 @@ For a fresh installation, ask which forms the user wants and create those using 
 - Click a link in the test mail and check that the click shows up on the contact (`GET /api/v1/contacts/{id}/timeline`). `GET /api/v1/broadcasts/{id}/stats` shows the totals.
 - With receiving on: send an email from an outside address (the customer's Gmail, or a reply to the test broadcast) to an address on `DOMAIN`, and check that it appears in `GET /api/v1/inbound` (and under **Inbox** in the UI) within a minute, with the sender linked to its contact when it is one. Reply to it once with `POST /api/v1/inbound/{id}/reply` (sandbox: only to addresses on `DOMAIN` or the simulator), and check the doctor's `inbound` check is `ok`. Mail to test addresses on `DOMAIN` now lands in this Inbox too, with SES's SPF, DKIM and DMARC verdicts on each message.
 - Check with `GET /api/v1/system/ses` that `account.production_access_enabled` is true, and read the quota (`account.max_24_hour_send`, `account.max_send_rate`).
+
+Distinguish queued, SES accepted, delivered and actual Inbox/Spam placement; they are different evidence. Inspect only authorized test messages in an already accessible inbox, or ask the owner to confirm receipt/headers. Don't create an Outlook account or widen mailbox access to fill a test matrix; report unavailable providers as untested. Use separate disposable owner-controlled addresses for form confirmation and both unsubscribe tests, so verification does not change an imported customer's consent. Explain that simulator tests create expected bounce/complaint rates and extra test contacts in the dashboard. Keep their results distinct from customer delivery statistics and source-import counts. Save a concise `VERIFICATION.md` with evidence and any accepted limits.
 
 ⛔ **CHECKPOINT 5:** Show the results, and the mid-flow enrolment plan from phase 8 step 4 (per sequence: how many contacts, at which step, from when). Only after this may anything be sent to real recipients.
 
@@ -333,7 +371,7 @@ For a fresh installation, ask which forms the user wants and create those using 
    - backup and restore, including the key file `data/secret.key`, `data/media/` and a safe copy of the server's `/opt/mailroom/.env` (deploy/README.md, "Backups and disaster recovery"), and that a restore starts with all sending paused: check the carried-over opt-outs, then resume (deploy/README.md, "What a restore does"),
    - what to do if Mailroom or AWS sends a warning,
    - how to rebuild or upgrade (`sudo docker compose build && sudo docker compose up -d`; after changing `.env`, `sudo docker compose up -d`, since a restart keeps the old settings),
-   - the monthly cost.
+   - the monthly cost, using the actual server plan and current SES pricing plan/bill rather than a hardcoded historic per-email price; say when an existing server invoice has not been verified.
 2. Don't print the admin password (ground rule 1: the chat is kept in the session transcript). Open `secrets/admin.txt` (Coolify: `secrets/admin-password.txt`, and remove `MAILROOM_ADMIN_PASSWORD` from Coolify's variables) for the customer in the simple text editor (as in guided setup step 2), and tell them to copy the password into their password manager with the address `https://APP_SUBDOMAIN.DOMAIN/`, and then delete the file.
 3. API token: ask whether they want to keep the `setup-agent` token for future agent work. If not, find its ID with `GET /api/v1/tokens` and revoke it with `DELETE /api/v1/tokens/{id}` as your last API call.
 4. Setup keys: the customer turns them off (guide step 7.3). The keys can't do this themselves. Remind them of each one:
@@ -343,4 +381,5 @@ For a fresh installation, ask which forms the user wants and create those using 
    - Coolify: delete the API token you used (`COOLIFY_API_TOKEN`), unless they want to keep it.
    - If a GHL export was used, revoke its read-only integration token when no further exports are needed.
 5. If the user migrated from another service and asks to remove its DNS records, first check which services still use them. Show the proposed changes and get explicit approval before deleting any record.
-6. Update `PROGRESS.md` to "done", give a short summary, and switch this file to operations mode (§ "Finishing the setup" at the top).
+6. After the final configuration/imports/media/forms are complete, take a final API backup and verify its off-server result. Securely preserve the original signing key (or explicit `MAILROOM_SECRET`), server runtime `.env`, uploaded media and deployed version; verify private file permissions/integrity without displaying contents. `data/media/` can be absent before the first upload; refresh its archive after adding the logo. Keep the setup credentials out of the runtime recovery copy.
+7. Confirm the owner can open the public URL and sign in. Record which scope is complete and which legacy migrations/provider tests were explicitly deferred. Remind the owner to retire temporary setup keys and any credentials exposed in chat, including an initial server password; do not claim those owner actions were completed without evidence. Update `PROGRESS.md` to "done", give a short summary and switch only this deployment copy to operations mode (§ "Finishing the setup" at the top).

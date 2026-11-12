@@ -13,7 +13,8 @@ import (
 // repository's root docker-compose.yaml, deploy/coolify.md): Coolify's
 // proxy terminates TLS, so Mailroom serves plain HTTP on 8080, publishes no
 // host ports (other services may use them), keeps its data in a named
-// volume and health-checks with the binary itself.
+// volume and health-checks with the binary itself. Networking must remain
+// resource-specific rather than joining a shared installation's route.
 func TestCoolifyComposeFile(t *testing.T) {
 	path := filepath.Join(appRoot, "..", "docker-compose.yaml")
 	if _, err := os.Stat(path); err != nil {
@@ -28,6 +29,7 @@ func TestCoolifyComposeFile(t *testing.T) {
 			Expose      []string          `yaml:"expose"`
 			Environment map[string]string `yaml:"environment"`
 			Volumes     []string          `yaml:"volumes"`
+			NetworkMode string            `yaml:"network_mode"`
 			Networks    map[string]struct {
 				Aliases []string `yaml:"aliases"`
 			} `yaml:"networks"`
@@ -57,11 +59,11 @@ func TestCoolifyComposeFile(t *testing.T) {
 	if !slices.Contains(svc.Expose, "8080") {
 		t.Errorf("expose = %v, want 8080", svc.Expose)
 	}
-	if network, ok := c.Networks["coolify"]; !ok || !network.External || network.Name != "coolify" {
-		t.Error("internal website route requires the existing external coolify network")
+	if len(c.Networks) != 0 || len(svc.Networks) != 0 {
+		t.Error("the reusable Coolify file must leave networking to the resource-specific default")
 	}
-	if !slices.Contains(svc.Networks["coolify"].Aliases, "titanclaws-mailroom") {
-		t.Error("internal website route requires the stable titanclaws-mailroom alias")
+	if svc.NetworkMode != "" {
+		t.Errorf("network_mode = %q: must not bypass the resource-specific default", svc.NetworkMode)
 	}
 	env := svc.Environment
 	if env["HTTP_ONLY"] != "1" || env["HTTP_ADDR"] != ":8080" || env["MAILROOM_DATA_DIR"] != "/data" {

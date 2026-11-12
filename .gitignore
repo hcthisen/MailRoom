@@ -4,4 +4,10 @@
 secrets/
 ghl-export/**/*.json
 ghl-export/**/*.csv
+# Generated migration reports, screenshots and email bodies can contain private data too.
+ghl-export/*
+!ghl-export/workflows/
+ghl-export/workflows/*
+!ghl-export/workflows/_template.md
+!ghl-export/workflows/_overview.md
 .claude/

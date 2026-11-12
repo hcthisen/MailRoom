@@ -35,14 +35,16 @@ Then type `claude` (or `codex`) and press Enter. The first time, you'll be asked
 
 The agent asks whether you want a fresh installation or to import existing GoHighLevel contacts and workflows. For a fresh installation, skip this part and continue with Part 2.
 
+**For the agent:** read [migration notes](migration-notes.md) before exporting. With the owner's authorization and an existing login, perform the read-only capture yourself where possible; ask the owner for the business decisions and missing access. Contacts/newsletters can be the initial scope while selected legacy workflows and forms are explicitly deferred.
+
 **1.1 Log in to your sub-account.** Go to <https://app.gohighlevel.com> and open **your business**, not the agency view.
 📸 `01-01-subaccount-dashboard.png`: the sub-account dashboard. Highlight the business name at the top left.
 
 **1.2 Export your contacts to a file (backup).**
 1. Click **Contacts** in the left menu.
 2. Tick the checkbox at the top of the list, then click **Select all _N_ contacts**.
-3. Click **Export**, keep all fields selected, and confirm.
-4. Download the file when it's ready and save it as `ghl-export/contacts-ui-export.csv` in the kit.
+3. Before exporting, open **Manage Fields** (or the column selector) and make the needed fields visible. The UI CSV contains the selected table columns, not automatically every contact field. Click **Export** (sometimes under **More**) and confirm.
+4. Open **Contacts → Bulk Actions**, find the completed export, and use its download arrow. Save it as `ghl-export/contacts-ui-export.csv` in the kit. The agent also saves the complete API export, including DND and custom fields, and compares contact IDs and email sets with this CSV.
 5. Write down the number of contacts.
 
 📸 `01-02a-contacts-select-all.png`: the list with every contact selected. Highlight "Select all N contacts".
@@ -72,11 +74,12 @@ The agent asks whether you want a fresh installation or to import existing GoHig
 ➡️ `.env`: `GHL_TOKEN=`
 > Can't see "Private Integrations"? Your user needs to be an admin of the sub-account. Ask your GoHighLevel account administrator to grant access.
 
-**1.5 Document each email workflow.** Workflows can't be exported, so you capture them yourself. The agent creates the folders and files for you and opens them in Notepad/TextEdit. For each workflow that sends emails:
+**1.5 Document the selected email workflows.** The agent first checks whether the documented read-only workflow-definition API is available. Some sub-accounts return `WORKFLOW_API_NOT_ENABLED_FOR_LOCATION`; that is a feature restriction, not a reason to grant broader permissions. In that case, the agent can capture the visible workflow in your logged-in browser, or help you document it. It creates the folders/files and opens them in Notepad/TextEdit when you need to fill in missing details. For each workflow being considered:
 1. Go to **Automation → Workflows** and open the workflow.
 2. Take a screenshot of the whole flow. Zoom out so every step is visible.
 3. Click each **Send Email** step, copy the subject and the email content, and paste them into a new file in the kit: `ghl-export/workflows/<workflow-name>/01-<short-name>.html`.
 4. Copy `ghl-export/workflows/_template.md` into the same folder, rename it `workflow.md`, and fill it in: what starts the flow, the delays, the conditions, and what should happen to people who are in the middle of the flow.
+5. Record **current active participants** separately from historical enrolments and publish status. Flag expired campaigns, branching, AI/webhooks, CRM/SMS actions and external account-provisioning dependencies. Inspect without saving, publishing or running the original workflow; discard unintended editor changes. The agent proposes a paused Mailroom equivalent only where the behavior is supported, then asks you to resolve the remaining differences.
 
 📸 `01-05a-workflows-list.png`: the workflow list. Highlight one workflow.
 📸 `01-05b-workflow-canvas.png`: an open workflow showing all its steps.
@@ -84,6 +87,7 @@ The agent asks whether you want a fresh installation or to import existing GoHig
 📸 `01-05d-workflow-md-filled.png`: a filled-in `workflow.md` in Notepad/TextEdit.
 
 **1.6 List your forms and other GHL features.** Open `ghl-export/workflows/_overview.md` and fill in which forms on your website send sign-ups to GoHighLevel, and whether you use SMS, calendars or anything else. Those other features aren't covered by this solution.
+The agent checks each selected form's actual purpose, consent wording, fields and linked automation. SMS-only consent, a booking request or a support/contact form does not by itself establish email-newsletter consent. Keep those forms in GHL unless you approve a specific replacement; you can request a separate newsletter signup form instead.
 📸 `01-06-overview-filled.png`: the filled-in overview in Notepad/TextEdit.
 
 ---

@@ -7,6 +7,11 @@ kit's `app/` directory. The compose file in this directory,
 [`docker-compose.yml`](docker-compose.yml), starts it. The runbook in
 [`../AGENTS.md`](../AGENTS.md) (phases 3, 4 and 5) uses the commands below.
 
+Before provisioning, read [agent deployment notes](agent-notes.md), especially
+for an existing AWS account, a sending subdomain, a separate public app host
+or an incoming-mail migration. The default AWS names are not isolated per
+installation; do not reconcile another installation's resources.
+
 ## Layout on the server
 
 Everything lives in `/opt/mailroom/`:
@@ -84,7 +89,11 @@ Put in the customer's sender settings: `DOMAIN`, `FROM_NAME`, `FROM_EMAIL`,
 `REPLY_TO_EMAIL`, `COMPANY_FOOTER`, `OWNER_EMAIL`, `TIMEZONE`,
 `APP_SUBDOMAIN`, `MAIL_FROM_SUBDOMAIN` and `AWS_REGION`, one `NAME=value`
 per line without comments. (Logged in on the server yourself, `sudoedit .env`
-works too.) Setup keys (the AWS `setup-agent` user, Cloudflare, Hetzner)
+works too.) For a separate public app hostname, also set
+`BASE_URL=https://mailroom.example.com`; it overrides the app's default
+`https://APP_SUBDOMAIN.DOMAIN`, while From and Reply-To still use `DOMAIN`.
+See the [DNS CLI limitation](agent-notes.md#separate-sending-identity-web-host-and-dns-zone)
+before generating its app records. Setup keys (the AWS `setup-agent` user, Cloudflare, Hetzner)
 never go into this file. The sender
 settings (`FROM_*`, `REPLY_TO_EMAIL`, `COMPANY_FOOTER`, `OWNER_EMAIL`,
 `TIMEZONE`) are copied into Mailroom's settings only once, by the first
@@ -117,6 +126,13 @@ from `app/` with the vendored modules. To stamp a version into the binary
 shell.
 
 ## 4. Provision SES
+
+First confirm ownership of every default resource in the
+[AWS inventory](agent-notes.md#inventory-aws-before-provision-ses).
+`provision ses` may update existing policies, event destinations and receipt
+rules. It has no namespace flag; setting only `SES_CONFIGURATION_SET` does
+not isolate a second installation. Use a dedicated account or a separately
+reviewed isolated-resource plan when the defaults belong to another install.
 
 Pass the setup user's keys for this one run only, and **never on a command
 line**: `sudo` writes every command it runs, with all its arguments, to the
@@ -218,13 +234,20 @@ keys (Cloudflare needs its token for that run only). Without `--yes`,
 `provision dns` changes nothing; it exits with code 2 when an existing
 record conflicts (it never changes one).
 
+If `BASE_URL` names a host other than `APP_SUBDOMAIN.DOMAIN`, omit the IP
+flags from these commands and separately plan the A/AAAA for the actual public
+host. The DNS CLI does not use `BASE_URL` for app records. For a sending
+subdomain, Cloudflare's owning zone may be its parent domain; the built-in
+client searches parents. For a migration, stage app/DKIM/MAIL FROM readiness
+before an approved incoming MX cutover; see [the cutover notes](agent-notes.md#stage-dns-and-the-incoming-mail-cutover).
+
 With receiving on (`INBOUND_DOMAIN` in `.env`), both also list the MX
 record of `DOMAIN` that sends its mail to SES receiving. An existing MX
 record is a conflict like any other: it is never changed.
 
-`--ipv4` (and `--ipv6`) add the A (and AAAA) record for `APP_SUBDOMAIN`;
-without them that record is left out, and the HTTPS certificate and checks
-fail. Leave out `--ipv6` if the server has no IPv6 address. Only pass
+`--ipv4` (and `--ipv6`) add the A (and AAAA) record for `APP_SUBDOMAIN.DOMAIN`;
+without them that record is left out. Ensure the actual public hostname has
+the appropriate records before HTTPS checks. Leave out `--ipv6` if the server has no IPv6 address. Only pass
 `--dmarc` if `_dmarc.DOMAIN` doesn't exist yet and the customer agreed:
 `dns records` doesn't look up DNS, so it adds the DMARC row whenever the
 flag is given, and a second DMARC record makes DMARC invalid for the whole
@@ -258,7 +281,8 @@ sudo docker compose logs -f mailroom # JSON logs
 ```
 
 On start, Mailroom applies database migrations (after backing up the
-database), gets its Let's Encrypt certificate for `APP_SUBDOMAIN.DOMAIN` on
+database), gets its Let's Encrypt certificate for the configured public host
+(`BASE_URL`, defaulting to `APP_SUBDOMAIN.DOMAIN`) on
 ports 80/443, and subscribes `/hooks/ses` to the SNS topic.
 
 ```bash
@@ -299,6 +323,10 @@ between, Mailroom pauses all sending (messages stay queued, nothing fails),
 alerts the owner, and resumes by itself once the recreated container's
 key works.
 
+This recipe applies only to an installation that owns those default resources.
+For an isolated installation in a shared account, follow its recorded resource
+plan instead; the default CLI may change another installation's sender.
+
 **If the sending key leaked** (e.g. a copy of `.env` got out), rotate it as
 above, then check the doctor's `sns_subscription` check. The sending user
 may subscribe only Mailroom's own `/hooks/ses` to the event topic, but a
@@ -332,10 +360,14 @@ backups (enabled in AGENTS.md phase 2) cover the whole disk, including
 `data/`.
 
 To keep a copy off the server as well, copy `data/secret.key`,
-`data/media/` and the server's `.env` somewhere safe (a password manager
-or an encrypted drive: `.env` holds the sending user's secret key) after
-the first start and after uploading images, e.g.
-`sudo tar -C /opt/mailroom -czf mailroom-files.tgz .env data/secret.key data/media`.
+`data/media/` and the server's `.env` into private recovery storage
+(`secrets/` locally or an encrypted drive: `.env` holds the sending user's
+secret key). If `MAILROOM_SECRET` is explicitly configured, preserve that
+original value in the runtime `.env` instead of expecting a generated key
+file. `data/media/` may not exist before the first upload; archive it when
+present and refresh the archive after uploading images. Run a final database
+backup after imports, layout and forms are complete and verify its off-server
+result. See the [recovery checklist](agent-notes.md#verify-the-running-api-and-make-recovery-complete).
 
 ### What a restore does
 
@@ -381,7 +413,10 @@ when you go back to an older binary by restoring a `pre-migrate-…` backup.
    instead of writing a new one: it has the sending keys, `SNS_TOPIC_ARN`
    and `BACKUP_BUCKET`, so nothing in AWS has to change.
 2. **Without a copy of the old `.env`:** write it as in step 2, then run
-   `provision ses --rotate-keys` as in step 4. It needs a setup key: in the
+   `provision ses --rotate-keys` as in step 4 **only if this installation owns
+   the default AWS resources**. For a shared-account isolated installation,
+   recover its recorded resource names and follow its own key plan instead.
+   The default recipe needs a setup key: in the
    AWS console (IAM → Users → `setup-agent` → Security credentials),
    **create a new access key** for this run and delete it afterwards. Don't
    switch the old, deactivated key back on: a copy of it may survive in old

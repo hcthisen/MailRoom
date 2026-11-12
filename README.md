@@ -77,6 +77,9 @@ See the [developer guide](app/README.md) for build options, configuration, and t
 | Document | Contents |
 |---|---|
 | [Setup guide](guide/steps.md) | Guided account and infrastructure setup |
+| [Agent execution plan](AGENTS.md#execution-and-parallel-work) | Parallel work, ownership, approval boundaries, and resumable handoffs |
+| [Deployment agent notes](deploy/agent-notes.md) | Existing AWS installs, separate hostnames, DNS cutover, troubleshooting, and recovery |
+| [Migration agent notes](guide/migration-notes.md) | GHL export evidence, suppression, workflow limitations, forms, and test strategy |
 | [VPS deployment](deploy/README.md) | Docker deployment, HTTPS, backups, and upgrades |
 | [Coolify deployment](deploy/coolify.md) | Deployment on an existing Coolify server |
 | [API guide](app/docs/api.md) | Authentication and API operations |
